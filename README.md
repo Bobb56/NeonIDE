@@ -1,5 +1,7 @@
 # NeonIDE
 
+![](images/neonide.png)
+
 ## Introduction
 NeonIDE is an IDE for the Neon programming language (https://neon.raphaael.fr) for TI-84 Plus CE.
 It is based on the CEdit text editor (https://github.com/Michael0x18/CEdit).
