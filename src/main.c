@@ -7,21 +7,11 @@
  */
 
 #include "cedit.h"
-#include "libmalloc.h"
-#ifdef BOS_BUILD
-#include <bos.h>
-#define BOS_SAFERAM 0xD03FD8
-#define gui_PrintLine_wrapper gui_PrintLine
-#endif
+#include "home.h"
+#include "state.h"
 
 bool initialize(struct estate *state)
 {
-#ifdef BOS_BUILD
-	fontlib_font_pack_t *font;
-	state->lines = sys_Malloc(10000 * sizeof(int16_t));
-#else
-	char fontname[10] = "DrMono";
-#endif
     memset(state->search_buffer,0,255);
 	//Default is false, if true, files will be archived after writes. Does nothing on BOS.
 	state->autoarchive = false;
@@ -36,7 +26,9 @@ bool initialize(struct estate *state)
 	//Default is true, if enabled, parse ceditrc from /etc/cedit/ceditrc. Otherwise use /home/.ceditrc
 	//Does nothin on TIOS
 	state->bos_use_system_config = true;
-	char buf1[10] = "Untitled";
+	//Default is false. If enabled, boost BOS maximum buffer size to 128Kb
+	//Does nothing on TIOS
+	state->bos_use_extra_buffer = false;
 	char buf2[10] = "DrMono";
 	state->multi_lines = 5;
 	state->named = false;
@@ -55,16 +47,15 @@ bool initialize(struct estate *state)
 	state->background_color = 255;
 	state->transparent_color = 1;
 	state->statusbar_text_color = 255;
-	state->statusbar_color = 11;
+	state->statusbar_color = 4;
 	state->border_color = 0;
 	state->dropshadow_color = 10;
-	state->focus_color = 142;
-#ifdef BOS_BUILD
-	if (!state->fontname) state->fontname = "/etc/fontlibc/DrMono";
-#else
-	strncpy(state->fontname, fontname, 10);
-#endif
+	state->focus_color = 4;
+	strncpy(buf2, state->fontname, 10);
 	state->saved = true;
+
+	state->selection_active = false;
+	state->alpha_state = 0;
 
 	state->clipboard_size = 0;
 	state->corner_radius = 10;
@@ -72,27 +63,12 @@ bool initialize(struct estate *state)
 	state->font = 0;
 	state->fonttype = 3;
     state->hide_special_files=1;
-#ifdef BOS_BUILD
-	state->text = BOS_SAFERAM;
-#else
-    //os_MemChk(&state->text);
-    state->text=(char*)gfx_vram;
-    state->text+=76800;
 	//state->text=malloc_noheap(MAX_BUFFER_SIZE);
 	//state->text = malloc(MAX_BUFFER_SIZE);
 	//Temporary workaround to avoid buffer being yeeted by fileIO.
-#endif
-#ifdef BOS_BUILD
-	if ((font = (fontlib_font_pack_t *)fs_GetFilePtr("/etc/fontlibc/DrMono")) != -1)
-	{
-		if (font->fontCount >= state->fonttype)
-		{
-			state->font = ((void *)font) + font->font_list[state->fonttype];
-		}
-	}
-#else
+
+
 	state->font = fontlib_GetFontByIndex("DrMono", state->fonttype);
-#endif
 	if (!state->font)
 	{
 		os_ClrHome();
@@ -112,70 +88,24 @@ bool initialize(struct estate *state)
 	return 0;
 }
 
-#ifdef BOS_BUILD
-int main(int argc, char *argv[]) {
-	static struct estate editor_state;
 
-	if (initialize(&editor_state)) {
-		gui_PrintLine("E0: gfx-err");
-		ngetchx();
-		return 1;
-	}
-	editor_state.filename = sys_Malloc(256);
-	//Argument parsing
-	if (argc > 1) {
-		if (argc > 2) {
-			editor_state.fontname = argv[2];
-		} else {
-			editor_state.fontname = 0;
-		}
-		strncpy(editor_state.filename, argv[1], 256);
-		editor_state.named = true;
-	}
-	gfx_Begin();
-	parseRC(&editor_state);
-	load_text(&editor_state);
-	//draw_editor(&editor_state);
-	editor_mainloop(&editor_state);
-	gfx_End();
-	return 0;
-}
-#else
-int main(int argc, char *argv[])
+
+
+int main(void)
 {
-	static struct estate editor_state;
-    //editor_state.text = (char*)malloc_noheap_safe(65536,"CEDITBUF");
-	if (initialize(&editor_state))
-	{
-		os_ClrHome();
-		os_PutStrFull("E0: gfx-err");
-		ngetchx();
-		return 1;
-	}
-	//Argument parsing
-	if (argc == 2)
-	{
-		strncpy(editor_state.filename, argv[1], 8);
-		editor_state.named = true;
-	}
-	else if (argc > 2)
-	{
-		os_ClrHome();
-		os_PutStrFull("Usage: CEdit [FILE]");
-		while (!os_GetCSC())
-			continue;
-		return 1;
-	}
-	else
-	{
-		//Put a little help blurb
-	}
 	gfx_Begin();
+
+	static struct estate editor_state;
+	if (initialize(&editor_state)) {
+		ngetchx();
+		gfx_End();
+		exit(0);
+	}
 	parseRC(&editor_state);
-	load_text(&editor_state);
-    draw_editor_full(&editor_state);
-	editor_mainloop(&editor_state);
+	
+	home_menu(&editor_state);
+	//launch_editor(&editor_state, NULL);
+	
 	gfx_End();
 	return 0;
 }
-#endif

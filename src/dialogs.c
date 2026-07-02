@@ -19,47 +19,90 @@ You may use version 2.1 or later only.
 */
 
 #include "dialogs.h"
+#include "clipboard.h"
 #include "primitives.h"
 #include "state.h"
 #include "cedit.h"
 #include "editor.h"
+#include <stdint.h>
 #include <math.h>
+
+
+bool string_equal(struct estate *state, int24_t pointer, char* str) {
+	while (*str && pointer < MAX_BUFFER_SIZE - 1) {
+		if (*str != state->text[pointer])
+			return false;
+
+		// Incrementation of the position in the string
+		str ++;
+		pointer ++;
+		if (pointer == state->c1)
+			pointer = state->c2 + 1;
+	}
+	return true;
+}
+
+
+
 
 //Does actual searching stufff - with three f's
 void perform_search(struct estate *state)
 {
-	for (int i = state->c2 + 1; (unsigned)i < MAX_BUFFER_SIZE - strlen(state->search_buffer); i++)
+	int pointer = 0;
+	while (pointer < MAX_BUFFER_SIZE - (int)strlen(state->search_buffer))
 	{
-		if (0 == strncasecmp(state->search_buffer, (state->text + i), strlen(state->search_buffer)))
+		if (string_equal(state, pointer, state->search_buffer))
 		{
-			while (state->c2 < i - 1)
-			{
-				cursor_right(state);
+			// The pointer is on the left part of the buffer
+			if (pointer < state->c1) {
+				while (state->c1 > pointer) {
+					cursor_left(state);
+				}
 			}
-			for (int j = 0; (unsigned)j < strlen(state->search_buffer); j++)
+			else {
+				while (state->c2 < pointer - 1) {
+					cursor_right(state);
+				}
+			}
+
+			for (unsigned j = 0; j < strlen(state->search_buffer); j++)
 			{
 				cursor_right_select(state);
 			}
 			return;
 		}
+
+		pointer++;
+		if (pointer == state->c1)
+			pointer = state->c2 + 1;
 	}
 }
 
 void show_search_dialog(struct estate *state)
 {
+	uint8_t previous_alpha_state = state->alpha_state;
+
 	short k = 0;
 	int numchars = 0;
 	numchars = strlen(state->search_buffer);
 	int cx = 52;
 	while (true)
 	{
-		gfx_SetDrawBuffer();
 		draw_dialog(state, 20, 60, 280, 100);
 		gfx_SetColor(state->border_color);
 		gfx_HorizLine_NoClip(20, 80, 280);
 		//fontlib_SetCursorPosition(115,80);
 		fontlib_SetCursorPosition(115, 65);
 		fontlib_DrawString("Search");
+
+		fontlib_SetCursorPosition(250, 65);
+		if (state->alpha_state == 1) {
+			fontlib_DrawString("alpha");
+		}
+		else if (state->alpha_state == 2) {
+			fontlib_DrawString("ALPHA");
+		}
+
 		fontlib_SetCursorPosition(30, 90);
 		fontlib_DrawString("Enter string to search for:");
 		gfx_SetColor(state->dropshadow_color);
@@ -71,21 +114,21 @@ void show_search_dialog(struct estate *state)
 		gfx_VertLine(52 + FONT_WIDTH * numchars, 112, 12);
 		cx = 52 + FONT_WIDTH * numchars;
 		gfx_BlitBuffer();
-		gfx_SetDrawScreen();
 		k = ngetchx_xy(state, cx, 112);
+
 		if (k == KEY_CLEAR)
 		{
-			return;
+			goto show_search_dialog_return;
 		}
 		if (k == '\n')
 		{
 			if (!numchars)
 			{
-				return;
+				goto show_search_dialog_return;
 			}
 			//TODO search for stuff
 			perform_search(state);
-			return;
+			goto show_search_dialog_return;
 		}
 		if (!is_control(k))
 		{
@@ -101,8 +144,115 @@ void show_search_dialog(struct estate *state)
 				state->search_buffer[--numchars] = 0;
 		}
 	}
+
+show_search_dialog_return:
+	state->alpha_state = previous_alpha_state;
 	return;
 }
+
+
+void goto_line(struct estate* state, int24_t line_number) {
+	if (line_number < 1)
+		line_number = 1;
+
+	if (state->lc1 + 1 > line_number) {
+		while (state->lc1 + 1 > line_number) {
+			cursor_up(state);
+		}
+	}
+	else if (state->lc1 + 1 < line_number) {
+		int24_t old_lc1 = state->lc1;
+		while (state->lc1 + 1 < line_number) {
+			cursor_down(state);
+
+			if (state->lc1 == old_lc1)
+				break;
+			else
+				old_lc1 = state->lc1;
+		}
+	}
+}
+
+
+
+void show_goto_dialog(struct estate *state)
+{
+	uint8_t previous_alpha_state = state->alpha_state;
+	state->alpha_state = 0;
+
+	short k = 0;
+	int numchars = 0;
+	char buffer[6] = {0};
+	int cx = 52;
+	while (true)
+	{
+		draw_dialog(state, 20, 60, 280, 100);
+		gfx_SetColor(state->border_color);
+		gfx_HorizLine_NoClip(20, 80, 280);
+		//fontlib_SetCursorPosition(115,80);
+		fontlib_SetCursorPosition(95, 65);
+		fontlib_DrawString("Goto line");
+
+		fontlib_SetCursorPosition(250, 65);
+		if (state->alpha_state == 1) {
+			fontlib_DrawString("alpha");
+		}
+		else if (state->alpha_state == 2) {
+			fontlib_DrawString("ALPHA");
+		}
+
+		fontlib_SetCursorPosition(30, 90);
+		fontlib_DrawString("Enter line number:");
+		gfx_SetColor(state->dropshadow_color);
+		gfx_Rectangle_NoClip(51, 111, 220, 16);
+		gfx_SetColor(state->border_color);
+		gfx_Rectangle_NoClip(50, 110, 220, 16);
+		fontlib_SetCursorPosition(52, 112);
+		fontlib_DrawString(buffer);
+		gfx_VertLine(52 + FONT_WIDTH * numchars, 112, 12);
+		cx = 52 + FONT_WIDTH * numchars;
+		gfx_BlitBuffer();
+		k = ngetchx_xy(state, cx, 112);
+		if (k == KEY_CLEAR)
+		{
+			goto show_goto_dialog_return;
+		}
+		if (k == '\n')
+		{
+			if (!numchars)
+			{
+				goto show_goto_dialog_return;
+			}
+
+			int24_t line_number = 0;
+			for (uint8_t index = 0 ; index < numchars ; index ++) {
+				line_number *= 10;
+				line_number += buffer[index] - '0';
+			}
+
+			goto_line(state, line_number);
+			goto show_goto_dialog_return;
+		}
+		if (k >= '0' && k <= '9')
+		{
+			if (numchars < 4)
+			{
+				buffer[numchars] = k;
+				numchars++;
+			}
+		}
+		if (k == KEY_BS)
+		{
+			if (numchars)
+				buffer[--numchars] = 0;
+		}
+	}
+show_goto_dialog_return:
+	state->alpha_state = previous_alpha_state;
+	return;
+}
+
+
 
 uint8_t show_color_selection_dialog(struct estate *state, uint8_t current_value)
 {
@@ -111,7 +261,6 @@ uint8_t show_color_selection_dialog(struct estate *state, uint8_t current_value)
 	short index = current_value;
 	while (k != KEY_CLEAR)
 	{
-		gfx_SetDrawBuffer();
 		state->transparent_color = temp_transparent_color;
 		draw_dialog(state, 20, 20, 280, 200);
 		gfx_SetColor(state->border_color);
@@ -136,7 +285,6 @@ uint8_t show_color_selection_dialog(struct estate *state, uint8_t current_value)
 		gfx_Rectangle_NoClip(32 + 8 * (index % 32), 72 + 8 * (index >> 5), 8, 8);
 		gfx_Rectangle_NoClip(31 + 8 * (index % 32), 71 + 8 * (index >> 5), 10, 10);
 		gfx_BlitBuffer();
-		gfx_SetDrawScreen();
 		k = ngetchx();
 		if (k == KEY_CLEAR)
 		{
@@ -175,7 +323,6 @@ void show_editor_settings_dialog(struct estate *state)
 	short index = 0;
 	while (k != KEY_CLEAR)
 	{
-		gfx_SetDrawBuffer();
 		draw_dialog(state, 20, 20, 280, 200);
 		gfx_SetColor(state->border_color);
 		gfx_HorizLine_NoClip(20, 40, 280);
@@ -215,10 +362,9 @@ void show_editor_settings_dialog(struct estate *state)
 		fontlib_SetCursorPosition(24, 96 + 55 + 18);
 		fontlib_DrawString("Permanent changes can be made");
 		fontlib_SetCursorPosition(24, 96 + 55 + 30);
-		fontlib_DrawString("by editing CEDITRC");
+		fontlib_DrawString("by editing NEIDERC");
 		//~~//~~//~~//~~//~~//~~//~~//~~//~~//~~//
 		gfx_BlitBuffer();
-		gfx_SetDrawScreen();
 		k = ngetchx();
 		if (k == KEY_DOWN)
 		{
@@ -267,7 +413,6 @@ void show_editor_settings_dialog(struct estate *state)
 void show_keybind_dialog(struct estate *state)
 {
 	//short k = 0;
-	gfx_SetDrawBuffer();
 	draw_dialog(state, 40, 40, 240, 160);
 	gfx_SetColor(state->border_color);
 	gfx_HorizLine_NoClip(40, 60, 240);
@@ -281,7 +426,6 @@ void show_keybind_dialog(struct estate *state)
 	fontlib_SetCursorPosition(51, 86);
 	fontlib_DrawString("See docs for more info.");
 	gfx_BlitBuffer();
-	gfx_SetDrawScreen();
 	ngetchx();
 }
 
@@ -291,7 +435,6 @@ void show_appearance_settings_dialog(struct estate *state)
 	int index = 0;
 	while (k != KEY_CLEAR)
 	{
-		gfx_SetDrawBuffer();
 		draw_dialog(state, 20, 20, 280, 200);
 		gfx_SetColor(state->border_color);
 		gfx_HorizLine_NoClip(20, 40, 280);
@@ -383,12 +526,11 @@ void show_appearance_settings_dialog(struct estate *state)
 		fontlib_SetCursorPosition(31, 178);
 		fontlib_DrawString("These settings are temporary.");
 		fontlib_SetCursorPosition(31, 190);
-		fontlib_DrawString("Edit CEDITRC to make changes");
+		fontlib_DrawString("Edit NEIDERC to make changes");
 		fontlib_SetCursorPosition(31, 202);
 		fontlib_DrawString("permanent.");
 
 		gfx_BlitBuffer();
-		gfx_SetDrawScreen();
 		k = ngetchx();
 		if (k == KEY_RIGHT || k == '\n')
 		{
@@ -400,7 +542,7 @@ void show_appearance_settings_dialog(struct estate *state)
 				fontlib_SetForegroundColor(state->text_color);
 				fontlib_SetCursorPosition(0,0);
 				fontlib_DrawUInt(state->text_color,1);
-				//gfx_BlitBuffer();
+				gfx_BlitBuffer();
 				ngetchx();*/
 				break;
 			case 1:
@@ -459,7 +601,6 @@ void show_appearance_settings_dialog_nocolor(struct estate *state)
 	int index = 0;
 	while (k != KEY_CLEAR)
 	{
-		gfx_SetDrawBuffer();
 		draw_dialog(state, 20, 20, 280, 200);
 		gfx_SetColor(state->border_color);
 		gfx_HorizLine_NoClip(20, 40, 280);
@@ -550,12 +691,11 @@ void show_appearance_settings_dialog_nocolor(struct estate *state)
 		fontlib_SetCursorPosition(31, 178);
 		fontlib_DrawString("These settings are temporary.");
 		fontlib_SetCursorPosition(31, 190);
-		fontlib_DrawString("Edit CEDITRC to make changes");
+		fontlib_DrawString("Edit NEIDERC to make changes");
 		fontlib_SetCursorPosition(31, 202);
 		fontlib_DrawString("permanent.");
 
 		gfx_BlitBuffer();
-		gfx_SetDrawScreen();
 		k = ngetchx();
 		if (k == KEY_RIGHT || k == '\n')
 		{
@@ -579,85 +719,55 @@ void show_appearance_settings_dialog_nocolor(struct estate *state)
 }
 
 /*
- * Draws the main menu given the state parameters and the selection index
+ * Draws the Tools menu given the state parameters and the selection index
  */
-void menu_backend_draw(struct estate *state, int index)
+void tools_backend_draw(struct estate *state, int index)
 {
-	draw_dialog(state, 20, 20, 280, 200);
+	draw_dialog(state, 100, 115, 110, 103);
 	gfx_SetColor(state->border_color);
-	gfx_HorizLine_NoClip(20, 40, 280);
-	fontlib_SetCursorPosition(104, 25);
+	gfx_HorizLine_NoClip(100, 135, 110);
+	fontlib_SetCursorPosition(125, 120);
 	fontlib_SetForegroundColor(state->text_color);
-	fontlib_DrawString("CEdit Settings");
-	fontlib_SetCursorPosition(30, 45);
+	fontlib_DrawString("Tools");
+	fontlib_SetCursorPosition(106, 140);
 	if (index == 0)
 	{
 		fontlib_SetForegroundColor(state->focus_color);
-		//fontlib_DrawString(">");
 	}
-	fontlib_DrawString("Editor Settings");
+	fontlib_DrawString("1) Goto line");
 	fontlib_SetForegroundColor(state->text_color);
-	fontlib_SetCursorPosition(30, 60);
+	fontlib_SetCursorPosition(106, 155);
 	if (index == 1)
 	{
 		fontlib_SetForegroundColor(state->focus_color);
-		//fontlib_DrawString(">");
 	}
-	fontlib_DrawString("Appearance Settings");
+	fontlib_DrawString("2) Search");
 	fontlib_SetForegroundColor(state->text_color);
-	fontlib_SetCursorPosition(30, 75);
+	fontlib_SetCursorPosition(106, 170);
 	if (index == 2)
 	{
 		fontlib_SetForegroundColor(state->focus_color);
-		//fontlib_DrawString(">");
 	}
-	fontlib_DrawString("Persistence Settings");
+	fontlib_DrawString("3) Copy");
 	fontlib_SetForegroundColor(state->text_color);
-	fontlib_SetCursorPosition(30, 90);
+	fontlib_SetCursorPosition(106, 185);
 	if (index == 3)
 	{
 		fontlib_SetForegroundColor(state->focus_color);
-		//fontlib_DrawString(">");
 	}
-	fontlib_DrawString("About Cedit");
+	fontlib_DrawString("4) Cut");
 	fontlib_SetForegroundColor(state->text_color);
-	fontlib_SetCursorPosition(30, 105);
+	fontlib_SetCursorPosition(106, 200);
 	if (index == 4)
 	{
 		fontlib_SetForegroundColor(state->focus_color);
-		//fontlib_DrawString(">");
 	}
-	fontlib_DrawString("Keybind information");
-	fontlib_SetForegroundColor(state->text_color);
-	fontlib_SetCursorPosition(30, 120);
-	if (index == 5)
-	{
-		fontlib_SetForegroundColor(state->focus_color);
-		//fontlib_DrawString(">");
-	}
-	fontlib_DrawString("Bug report");
-	fontlib_SetForegroundColor(state->text_color);
-	fontlib_SetCursorPosition(30, 135);
-	if (index == 6)
-	{
-		fontlib_SetForegroundColor(state->focus_color);
-		//fontlib_DrawString(">");
-	}
-	fontlib_DrawString("Back");
-	fontlib_SetForegroundColor(state->text_color);
-	fontlib_SetCursorPosition(30, 150);
-	if (index == 7)
-	{
-		fontlib_SetForegroundColor(state->focus_color);
-		//fontlib_DrawString(">");
-	}
-	fontlib_DrawString("Quit CEdit");
+	fontlib_DrawString("5) Paste");
 }
 
 void show_persistence_dialog(struct estate *state)
 {
 	//short k = 0;
-	gfx_SetDrawBuffer();
 	draw_dialog(state, 20, 20, 280, 200);
 	gfx_SetColor(state->border_color);
 	gfx_HorizLine_NoClip(20, 40, 280);
@@ -669,46 +779,222 @@ void show_persistence_dialog(struct estate *state)
 	fontlib_SetCursorPosition(31, 54);
 	fontlib_DrawString("not currently supported.");
 	fontlib_SetCursorPosition(31, 66);
-	fontlib_DrawString("Please edit CEDITRC instead.");
+	fontlib_DrawString("Please edit NEIDERC instead.");
 	gfx_BlitBuffer();
-	gfx_SetDrawScreen();
 	ngetchx();
 }
 
-void show_menu_dialog(struct estate *state)
+const int n_chars = 14;
+static const char chars[] = {
+	'#',
+	'~',
+	'\'',
+	'\\',
+	'<',
+	'>',
+	'=',
+	'%',
+	'&',
+	'@',
+	'!',
+	';',
+	'$',
+	'_'
+};
+
+void chars_backend_draw(struct estate* state, int line, int col, int n_lines, int n_columns) {
+	//70, 70
+	draw_dialog(state, 5, 120, 180, 100);
+	gfx_SetColor(state->border_color);
+	gfx_HorizLine_NoClip(5, 140, 180);
+	fontlib_SetCursorPosition(15, 125);
+	fontlib_SetForegroundColor(state->text_color);
+	fontlib_DrawString("Character selection");
+
+	const uint8_t space = 16;
+
+	for (int i=0 ; i < n_chars ; i++) {
+		int l = i/n_lines;
+		int c = i%n_columns;
+
+		fontlib_SetCursorPosition(60 + space * c, 150 + space * l);
+
+		if (l == line && c == col) {
+			fontlib_SetTransparency(false);
+			fontlib_SetForegroundColor(state->text_highlight_color);
+			fontlib_SetBackgroundColor(state->focus_color);
+		}
+		fontlib_DrawGlyph(chars[i]);
+		fontlib_SetForegroundColor(state->text_color);
+		fontlib_SetBackgroundColor(state->text_highlight_color);
+	}
+}
+
+
+void show_chars_dialog(struct estate* state) {
+	const uint8_t n_lines = 4;
+	const uint8_t n_columns = 4;
+
+	int line = 0, col = 0;
+	short k = 0;
+	while (k != KEY_CLEAR && k != KEY_F2)
+	{
+		if (k == '\n')
+		{
+			insert_char(state, chars[line * n_columns + col]);
+		}
+		else if (k == KEY_BS) {
+			bs(state);
+		}
+		else if (k == KEY_DEL) {
+			del(state);
+		}
+		else if (k == KEY_UP)
+		{
+			if (line == 0)
+				line = n_lines - 1;
+			else
+			 	line--;
+
+			if (line * n_columns + col >= n_chars)
+				line--;
+		}
+		else if (k == KEY_DOWN)
+		{
+			line++;
+			if (line * n_columns + col >= n_chars)
+				line = 0;
+		}
+		else if (k == KEY_LEFT)
+		{
+			if (col == 0)
+				col = n_columns - 1;
+			else
+			 	col--;
+
+			if (line * n_columns + col >= n_chars)
+				col = (n_chars - 1)%n_columns;
+		}
+		else if (k == KEY_RIGHT)
+		{
+			col++;
+			if (col == n_columns)
+				col = 0;
+
+			if (line * n_columns + col >= n_chars)
+				col = 0;
+		}
+		draw_editor(state);
+		chars_backend_draw(state, line, col, n_lines, n_columns);
+		gfx_BlitBuffer();
+		k = ngetchx();
+	}
+}
+
+
+
+void options_backend_draw(struct estate *state, int index)
+{
+	draw_dialog(state, 7, 93, 200, 125);
+	gfx_SetColor(state->border_color);
+	gfx_HorizLine_NoClip(7, 113, 200);
+	fontlib_SetCursorPosition(45, 98);
+	fontlib_SetForegroundColor(state->text_color);
+	fontlib_DrawString("NeonIDE options");
+	fontlib_SetCursorPosition(14, 118);
+	if (index == 0)
+	{
+		fontlib_SetForegroundColor(state->focus_color);
+		//fontlib_DrawString(">");
+	}
+	fontlib_DrawString("1) Save file");
+	fontlib_SetForegroundColor(state->text_color);
+	fontlib_SetCursorPosition(14, 133);
+	if (index == 1)
+	{
+		fontlib_SetForegroundColor(state->focus_color);
+		//fontlib_DrawString(">");
+	}
+	fontlib_DrawString("2) Save file as");
+	fontlib_SetForegroundColor(state->text_color);
+	fontlib_SetCursorPosition(14, 148);
+	if (index == 2)
+	{
+		fontlib_SetForegroundColor(state->focus_color);
+		//fontlib_DrawString(">");
+	}
+	fontlib_DrawString("3) Editor settings");
+	fontlib_SetForegroundColor(state->text_color);
+	fontlib_SetCursorPosition(14, 163);
+	if (index == 3)
+	{
+		fontlib_SetForegroundColor(state->focus_color);
+		//fontlib_DrawString(">");
+	}
+	fontlib_DrawString("4) Appearance Settings");
+	fontlib_SetForegroundColor(state->text_color);
+	fontlib_SetCursorPosition(14, 178);
+	if (index == 4)
+	{
+		fontlib_SetForegroundColor(state->focus_color);
+		//fontlib_DrawString(">");
+	}
+	fontlib_DrawString("5) Persistence Settings");
+	fontlib_SetForegroundColor(state->text_color);
+	fontlib_SetCursorPosition(14, 193);
+	if (index == 5)
+	{
+		fontlib_SetForegroundColor(state->focus_color);
+		//fontlib_DrawString(">");
+	}
+	fontlib_DrawString("6) Close editor");
+}
+
+
+int show_options_dialog(struct estate *state)
 {
 	short k = 0;
 	int index = 0;
-	gfx_SetDrawBuffer();
-    gfx_FillScreen(state->background_color);
-	while (k != KEY_CLEAR)
+	while (k != KEY_CLEAR && k != KEY_F1)
 	{
-		if (k == '\n' || k == KEY_RIGHT)
+		if (k == '\n' || k == KEY_RIGHT || (k >= '1' && k <= '6'))
 		{
+			if (k >= '1' && k <= '6') {
+				index = k - '1';
+			}
+
 			switch (index)
 			{
 			case 0:
-				show_editor_settings_dialog(state);
-				break;
+				write_file(state);
+				return 0;
 			case 1:
-				show_appearance_settings_dialog(state);
+				draw_editor(state);
+				gfx_SwapDraw();
+				if (!show_save_dialog(state)) {
+					write_file(state);
+					return 0;
+				}
 				break;
 			case 2:
-				show_persistence_dialog(state);
-				break;
+				show_editor_settings_dialog(state);
+				return 0;
 			case 3:
-				show_about_dialog(state);
-				break;
+				show_appearance_settings_dialog(state);
+				return 0;
 			case 4:
-				show_keybind_dialog(state);
-				break;
+				show_persistence_dialog(state);
+				return 0;
 			case 5:
+				draw_editor(state);
+				gfx_SwapDraw();
+				bool result = state->saved || show_unsaved_dialog(state);
+				draw_editor(state);
+				gfx_SwapDraw();
+				if (result)
+					return -1;
 				break;
-			case 6:
-				return;
-			case 7:
-				gfx_End();
-				exit(0);
+				break;
 			}
 		}
 		if (k == KEY_UP)
@@ -720,12 +1006,66 @@ void show_menu_dialog(struct estate *state)
 		}
 		if (k == KEY_DOWN)
 		{
-			if (index < 7)
+			if (index < 5)
 			{
 				index++;
 			}
 		}
-		menu_backend_draw(state, index);
+		options_backend_draw(state, index);
+
+		gfx_BlitBuffer();
+		k = ngetchx();
+	}
+	return 0;
+}
+
+
+
+void show_tools_dialog(struct estate *state)
+{
+	short k = 0;
+	int index = 0;
+	while (k != KEY_CLEAR && k != KEY_F3)
+	{
+		if (k == '\n' || k == KEY_RIGHT || (k >= '1' && k <= '5'))
+		{
+			if (k >= '1' && k <= '5')
+				index = k - '1';
+
+			switch (index)
+			{
+			case 0:
+				show_goto_dialog(state);
+				return;
+			case 1:
+				show_search_dialog(state);
+				return;
+			case 2:
+				cb_copy(state);
+				return;
+			case 3:
+				cb_cut(state);
+				return;
+			case 4:
+				cb_paste(state);
+				return;
+			}
+		}
+		if (k == KEY_UP)
+		{
+			if (index)
+			{
+				index--;
+			}
+		}
+		if (k == KEY_DOWN)
+		{
+			if (index < 4)
+			{
+				index++;
+			}
+		}
+		tools_backend_draw(state, index);
 
 		gfx_BlitBuffer();
 		k = ngetchx();
@@ -734,8 +1074,6 @@ void show_menu_dialog(struct estate *state)
 
 void draw_dialog(struct estate *state, int x, int y, int w, int h)
 {
-	//draw_editor();
-
 	gfx_SetColor(state->dropshadow_color);
 	gfx_FillCircle_NoClip(5 + x + state->corner_radius,
 						  5 + y + state->corner_radius, state->corner_radius);
@@ -808,19 +1146,12 @@ bool is_special(char *s)
 		return true;
 	if (0 == strcmp("USBDRVCE", s))
 		return true;
-	if (0==strcmp("KEYPADC",s))
-		return true;
-	if(0==strcmp("MSDDRVCE",s))
-		return true;
 	return false;
 }
 
-#ifdef BOS_BUILD
-//TODO!!!
-#else
+
 bool show_open_dialog(struct estate *state)
 {
-
 	const int num_rows = 13;
 	short k = 0;
 	//Selected index
@@ -862,7 +1193,6 @@ bool show_open_dialog(struct estate *state)
 	int numfiles = i;
 	while (k != KEY_CLEAR)
 	{
-		gfx_SetDrawBuffer();
 		draw_dialog(state, 20, 20, 280, 200);
 		gfx_SetColor(state->border_color);
 		gfx_HorizLine_NoClip(20, 40, 280);
@@ -898,7 +1228,6 @@ bool show_open_dialog(struct estate *state)
 			fontlib_DrawStringL(arr + 24 * (i + scrstart) + 8, 16);
 		}
 		gfx_BlitBuffer();
-		gfx_SetDrawScreen();
 		k = ngetchx();
 		if (k == KEY_UP)
 		{
@@ -959,35 +1288,40 @@ bool show_open_dialog(struct estate *state)
 	}
 	return false;
 }
-#endif
 
 //==========================//END_OF_OPEN_FUNCTIONS//==========================//
 
-//1 means canceled
-bool show_save_dialog(struct estate *state)
+
+char* show_create_dialog(struct estate *state)
 {
+	uint8_t previous_alpha_state = state->alpha_state;
+	state->alpha_state = 1;
+
 	short k = 0;
 	int numchars = 0;
-#ifdef BOS_BUILD
-	char buffer[256];
-	memset(buffer, 0, 256);
-#else
-	char buffer[9];
+	char* buffer = malloc(9);
 	memset(buffer, 0, 9);
-#endif
 
 	int cx = 52;
 	while (true)
 	{
-		gfx_SetDrawBuffer();
 		draw_dialog(state, 20, 60, 280, 100);
 		gfx_SetColor(state->border_color);
 		gfx_HorizLine_NoClip(20, 80, 280);
 		//fontlib_SetCursorPosition(115,80);
-		fontlib_SetCursorPosition(115, 65);
-		fontlib_DrawString("Save File");
+		fontlib_SetCursorPosition(80, 65);
+		fontlib_DrawString("Choose a file name");
+
+		fontlib_SetCursorPosition(250, 65);
+		if (state->alpha_state == 1) {
+			fontlib_DrawString("alpha");
+		}
+		else if (state->alpha_state == 2) {
+			fontlib_DrawString("ALPHA");
+		}
+
 		fontlib_SetCursorPosition(30, 90);
-		fontlib_DrawString("Enter File Name to (Over)write:");
+		fontlib_DrawString("Enter file name:");
 		gfx_SetColor(state->dropshadow_color);
 		gfx_Rectangle_NoClip(51, 111, 220, 16);
 		gfx_SetColor(state->border_color);
@@ -997,33 +1331,111 @@ bool show_save_dialog(struct estate *state)
 		gfx_VertLine(52 + FONT_WIDTH * numchars, 112, 12);
 		cx = 52 + FONT_WIDTH * numchars;
 		gfx_BlitBuffer();
-		gfx_SetDrawScreen();
+
+		k = ngetchx_xy(state, cx, 112);
+
+		if (k == KEY_CLEAR)
+		{
+			free(buffer);
+			state->alpha_state = previous_alpha_state;
+			return NULL;
+		}
+		if (numchars && k == '\n')
+		{
+			// Check if the file already exists
+			uint8_t test = ti_Open(buffer, "r");
+			if (test == 0) {
+				state->alpha_state = previous_alpha_state;
+				return buffer;
+			}
+			ti_Close(test);
+			alert(state, "Error", "This file already exists");
+		}
+		else if (!is_control(k))
+		{
+			if (numchars < 8)
+			{
+				buffer[numchars] = k;
+				numchars++;
+			}
+		}
+		else if (k == KEY_BS)
+		{
+			if (numchars)
+				buffer[--numchars] = 0;
+		}
+	}
+	state->alpha_state = previous_alpha_state;
+	return NULL;
+}
+
+
+
+// true means canceled
+bool show_save_dialog(struct estate *state)
+{
+	uint8_t previous_alpha_state = state->alpha_state;
+	state->alpha_state = true;
+
+	bool ret_value;
+	short k = 0;
+	int numchars = 0;
+	char buffer[9];
+	memset(buffer, 0, 9);
+
+	int cx = 52;
+	while (true)
+	{
+		draw_dialog(state, 20, 60, 280, 100);
+		gfx_SetColor(state->border_color);
+		gfx_HorizLine_NoClip(20, 80, 280);
+		//fontlib_SetCursorPosition(115,80);
+		fontlib_SetCursorPosition(115, 65);
+		fontlib_DrawString("Save File");
+
+		fontlib_SetCursorPosition(250, 65);
+		if (state->alpha_state == 1) {
+			fontlib_DrawString("alpha");
+		}
+		else if (state->alpha_state == 2) {
+			fontlib_DrawString("ALPHA");
+		}
+
+		fontlib_SetCursorPosition(30, 90);
+		fontlib_DrawString("Enter file name:");
+		gfx_SetColor(state->dropshadow_color);
+		gfx_Rectangle_NoClip(51, 111, 220, 16);
+		gfx_SetColor(state->border_color);
+		gfx_Rectangle_NoClip(50, 110, 220, 16);
+		fontlib_SetCursorPosition(52, 112);
+		fontlib_DrawString(buffer);
+		gfx_VertLine(52 + FONT_WIDTH * numchars, 112, 12);
+		cx = 52 + FONT_WIDTH * numchars;
+		gfx_BlitBuffer();
 		k = ngetchx_xy(state, cx, 112);
 		if (k == KEY_CLEAR)
 		{
-			return true;
+			state->alpha_state = previous_alpha_state;
+			ret_value = true;
+			goto show_save_dialog_return;
 		}
 		if (k == '\n')
 		{
 			if (!numchars)
 			{
-				return true;
+				state->alpha_state = previous_alpha_state;
+				ret_value = true;
+				goto show_save_dialog_return;
 			}
 			state->named = true;
-#ifdef BOS_BUILD
-			strncpy(state->filename, buffer, 256);
-#else
 			strncpy(state->filename, buffer, 8);
-#endif
-			return false;
+			state->alpha_state = previous_alpha_state;
+			ret_value = false;
+			goto show_save_dialog_return;
 		}
 		if (!is_control(k))
 		{
-#ifdef BOS_BUILD
-			if (numchars < 255)
-#else
 			if (numchars < 8)
-#endif
 			{
 				buffer[numchars] = k;
 				numchars++;
@@ -1035,45 +1447,307 @@ bool show_save_dialog(struct estate *state)
 				buffer[--numchars] = 0;
 		}
 	}
-	return false;
+show_save_dialog_return:
+	state->alpha_state = previous_alpha_state;
+	return ret_value;
 }
 
 void show_about_dialog(struct estate *state)
 {
-	gfx_SetDrawBuffer();
 	draw_dialog(state, 60, 60, 200, 120);
 	gfx_SetColor(state->border_color);
 	gfx_HorizLine_NoClip(60, 80, 200);
 	//fontlib_SetCursorPosition(115,80);
-	fontlib_SetCursorPosition(115, 65);
-	fontlib_DrawString("About CEdit");
+	fontlib_SetCursorPosition(105, 65);
+	fontlib_DrawString("About NeonIDE");
 	fontlib_SetCursorPosition(80, 120);
-	fontlib_DrawString(CEDIT_VERSION_STRING);
+	fontlib_DrawString(NEONIDE_VERSION_STRING);
 	gfx_BlitBuffer();
-	gfx_SetDrawScreen();
 	ngetchx();
 }
 
-//TODO fix this - it's disgusting
-bool show_unsaved_dialog(struct estate *state)
+
+void show_unimplemented_dialog(struct estate *state)
 {
-	gfx_SetDrawBuffer();
 	draw_dialog(state, 60, 60, 200, 120);
 	gfx_SetColor(state->border_color);
 	gfx_HorizLine_NoClip(60, 80, 200);
 	//fontlib_SetCursorPosition(115,80);
-	fontlib_SetCursorPosition(65, 65);
-	fontlib_DrawString("Warning: Unsaved changes");
-	fontlib_SetCursorPosition(65, 80);
-	fontlib_DrawString("[enter]: discard");
-	fontlib_SetCursorPosition(65, 91);
-	fontlib_DrawString("[clear]: cancel");
+	fontlib_SetCursorPosition(105, 65);
+	fontlib_DrawString("Unimplemented");
+	fontlib_SetCursorPosition(65, 85);
+	fontlib_DrawString("Please wait the next");
+	fontlib_SetCursorPosition(65, 97);
+	fontlib_DrawString("major update of Neon for");
+	fontlib_SetCursorPosition(65, 109);
+	fontlib_DrawString("this feature to be added");
+
+	fontlib_SetCursorPosition(65, 129);
+	fontlib_DrawString("For now you need to use");
+	fontlib_SetCursorPosition(65, 141);
+	fontlib_DrawString("NeonIDE and the Neon app");
 	gfx_BlitBuffer();
-	gfx_SetDrawScreen();
-	short k = ngetchx();
-	if (k == '\n')
+	ngetchx();
+}
+
+
+
+void alert(struct estate *state, char* title, char* text)
+{
+	draw_dialog(state, 60, 90, 200, 60);
+	gfx_SetColor(state->border_color);
+	gfx_HorizLine_NoClip(60, 110, 200);
+	//fontlib_SetCursorPosition(115,80);
+	fontlib_SetCursorPosition(105, 95);
+	fontlib_DrawString(title);
+	fontlib_SetCursorPosition(65, 120);
+	fontlib_DrawString(text);
+	gfx_BlitBuffer();
+	ngetchx();
+}
+
+
+
+void confirm_backend_draw(struct estate *state, int index)
+{
+	draw_dialog(state, 110, 85, 105, 60);
+	gfx_SetColor(state->border_color);
+	gfx_HorizLine_NoClip(110, 105, 105);
+	fontlib_SetCursorPosition(115, 90);
+	fontlib_DrawString("Are you sure:");
+
+	fontlib_SetCursorPosition(114, 110);
+	if (index == 0)
 	{
-		return true;
+		fontlib_SetForegroundColor(state->focus_color);
+	}
+	fontlib_DrawString("1) Yes");
+	fontlib_SetForegroundColor(state->text_color);
+	fontlib_SetCursorPosition(114, 125);
+	if (index == 1)
+	{
+		fontlib_SetForegroundColor(state->focus_color);
+	}
+	fontlib_DrawString("2) No");
+	fontlib_SetForegroundColor(state->text_color);
+}
+
+bool show_confirm_dialog(struct estate *state)
+{
+	short k = 0;
+	int index = 0;
+	while (k != KEY_CLEAR)
+	{
+		if (k == '\n' || k == KEY_RIGHT || (k >= '1' && k <= '2'))
+		{
+			if (k >= '1' && k <= '2')
+				index = k - '1';
+
+			switch (index)
+			{
+			case 0:
+				return true;
+			case 1:
+				return false;
+			}
+		}
+		if (k == KEY_UP)
+		{
+			if (index)
+			{
+				index--;
+			}
+		}
+		if (k == KEY_DOWN)
+		{
+			if (index < 1)
+			{
+				index++;
+			}
+		}
+		confirm_backend_draw(state, index);
+
+		gfx_BlitBuffer();
+		k = ngetchx();
+	}
+	return false;
+}
+
+
+/*
+ * Draws the Tools menu given the state parameters and the selection index
+ */
+void file_menu_backend_draw(struct estate *state, int index)
+{
+	//x+135, y+80
+	draw_dialog(state, 195, 140, 110, 75);
+	gfx_SetColor(state->border_color);
+	gfx_HorizLine_NoClip(195, 160, 110);
+	fontlib_SetCursorPosition(200, 145);
+	fontlib_DrawString("File:");
+
+	fontlib_SetCursorPosition(199, 165);
+	if (index == 0)
+	{
+		fontlib_SetForegroundColor(state->focus_color);
+	}
+	fontlib_DrawString("1) Duplicate");
+	fontlib_SetForegroundColor(state->text_color);
+	fontlib_SetCursorPosition(199, 180);
+	if (index == 1)
+	{
+		fontlib_SetForegroundColor(state->focus_color);
+	}
+	fontlib_DrawString("2) Rename");
+	fontlib_SetForegroundColor(state->text_color);
+	fontlib_SetCursorPosition(199, 195);
+	if (index == 2)
+	{
+		fontlib_SetForegroundColor(state->focus_color);
+	}
+	fontlib_DrawString("3) Delete");
+	fontlib_SetForegroundColor(state->text_color);
+}
+
+void show_file_menu_dialog(struct estate *state, char* filename)
+{
+	short k = 0;
+	int index = 0;
+	while (k != KEY_CLEAR && k != KEY_F5)
+	{
+		if (k == '\n' || k == KEY_RIGHT || (k >= '1' && k <= '3'))
+		{
+			if (k >= '1' && k <= '3')
+				index = k - '1';
+
+			switch (index)
+			{
+				case 0: {
+					char* new_name = show_create_dialog(state);
+					if (new_name != NULL) {
+						uint8_t source = ti_Open(filename, "r");
+						uint8_t dest = ti_Open(new_name, "w");
+						char c;
+						while ((c = ti_GetC(source)) != EOF) {
+							ti_Write(&c, 1, 1, dest);
+						}
+						ti_Close(source);
+						ti_Close(dest);
+						free(new_name);
+					}
+					return;
+				}
+				case 1: {
+					char* new_name = show_create_dialog(state);
+					if (new_name != NULL) {
+						ti_Rename(filename, new_name);
+						free(new_name);
+					}
+					return;
+				}
+				case 2:
+					if (show_confirm_dialog(state)) {
+						ti_Delete(filename);
+						return;
+					}
+					break;
+			}
+		}
+		if (k == KEY_UP)
+		{
+			if (index)
+			{
+				index--;
+			}
+		}
+		if (k == KEY_DOWN)
+		{
+			if (index < 2)
+			{
+				index++;
+			}
+		}
+		file_menu_backend_draw(state, index);
+
+		gfx_BlitBuffer();
+		k = ngetchx();
+	}
+}
+
+
+
+
+void unsaved_backend_draw(struct estate *state, int index)
+{
+	draw_dialog(state, 60, 60, 200, 120);
+	gfx_SetColor(state->border_color);
+	gfx_HorizLine_NoClip(60, 80, 200);
+	fontlib_SetCursorPosition(65, 65);
+	fontlib_DrawString("You have unsaved changes:");
+
+	fontlib_SetCursorPosition(64, 85);
+	if (index == 0)
+	{
+		fontlib_SetForegroundColor(state->focus_color);
+	}
+	fontlib_DrawString("1) Save");
+	fontlib_SetForegroundColor(state->text_color);
+	fontlib_SetCursorPosition(64, 100);
+	if (index == 1)
+	{
+		fontlib_SetForegroundColor(state->focus_color);
+	}
+	fontlib_DrawString("2) Discard changes");
+	fontlib_SetForegroundColor(state->text_color);
+	fontlib_SetCursorPosition(64, 115);
+	if (index == 2)
+	{
+		fontlib_SetForegroundColor(state->focus_color);
+	}
+	fontlib_DrawString("3) Cancel");
+	fontlib_SetForegroundColor(state->text_color);
+}
+
+bool show_unsaved_dialog(struct estate *state)
+{
+	short k = 0;
+	int index = 0;
+	while (k != KEY_CLEAR)
+	{
+		if (k == '\n' || k == KEY_RIGHT || (k >= '1' && k <= '3'))
+		{
+			if (k >= '1' && k <= '3')
+				index = k - '1';
+
+			switch (index)
+			{
+			case 0:
+				write_file(state);
+				return true;
+			case 1:
+				return true;
+			case 2:
+				return false;
+			}
+		}
+		if (k == KEY_UP)
+		{
+			if (index)
+			{
+				index--;
+			}
+		}
+		if (k == KEY_DOWN)
+		{
+			if (index < 2)
+			{
+				index++;
+			}
+		}
+		unsaved_backend_draw(state, index);
+
+		gfx_BlitBuffer();
+		k = ngetchx();
 	}
 	return false;
 }

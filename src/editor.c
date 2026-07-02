@@ -11,14 +11,6 @@
 #include "find.h"
 //#include "softc.h"
 
-#ifdef BOS_BUILD
-#include <bos.h>
-#endif
-
-#ifdef BOS_BUILD
-const char *default_ceditrc_data = "TC:0\nTHC:255\nTSC:120\nTSHC:30\nBGC:255\nTPC:1\nSBTC:255\nSBC:11\nBC:0\nDSC:10\nFC:142\nAA:1\nCB:1\nHSF:1";
-#endif
-
 
 bool is_control(short k)
 {
@@ -45,7 +37,7 @@ void insert_char(struct estate *state, char c)
 	state->saved = false;
 	state->text[state->c1] = c;
 	state->c1++;
-	if (c == '\n')
+	if (state->text[state->c1 - 1] == '\n')
 	{
 		insert_newline(state);
 	}
@@ -339,7 +331,7 @@ void cursor_down_select(struct estate *state)
 	}
 }
 
-void handle_key(struct estate *state, short k)
+int handle_key(struct estate *state, short k)
 {
 	if (!is_control(k))
 	{
@@ -380,16 +372,16 @@ void handle_key(struct estate *state, short k)
 			del(state);
 			break;
 		case KEY_SAVE_AS:
-			//draw_editor(state);
-			//gfx_SwapDraw();
+			draw_editor(state);
+			gfx_SwapDraw();
 			if (!show_save_dialog(state))
 				write_file(state);
 			break;
 		case KEY_SAVE: //save
 			if (!state->named)
 			{
-				//draw_editor(state);
-				//gfx_SwapDraw();
+				draw_editor(state);
+				gfx_SwapDraw();
 				if (show_save_dialog(state))
 					break;
 			}
@@ -444,35 +436,52 @@ void handle_key(struct estate *state, short k)
 			cursor_to_end(state);
 			break;
 		case KEY_F1:
-			cb_cut(state);
+			draw_editor(state);
+            gfx_SwapDraw();
+			int res = show_options_dialog(state);
+			draw_editor(state);
+            gfx_SwapDraw();
+			if (res != 0)
+				return -1;
 			break;
 		case KEY_F2:
-			cb_copy(state);
+			draw_editor(state);
+            gfx_SwapDraw();
+			show_chars_dialog(state);
+			draw_editor(state);
+            gfx_SwapDraw();
 			break;
 		case KEY_F3:
-			cb_paste(state);
+			draw_editor(state);
+            gfx_SwapDraw();
+			show_tools_dialog(state);
+			draw_editor(state);
+            gfx_SwapDraw();
 			break;
         case KEY_F4:
-            //draw_editor(state);
-            //gfx_SwapDraw();
-            show_search_dialog(state);
-            //draw_editor(state);
-            //gfx_SwapDraw();
-            break;
+			draw_editor(state);
+            gfx_SwapDraw();
+			bool result = state->saved || show_unsaved_dialog(state);
+			draw_editor(state);
+            gfx_SwapDraw();
+			if (result)
+            	return -1;
+			break;
 		case KEY_F5:
-			//draw_editor(state);
-			//gfx_SwapDraw();
-			show_menu_dialog(state);
+            gfx_SwapDraw();
+            show_unimplemented_dialog(state);
+            gfx_SwapDraw();
 			break;
 		case KEY_OPEN:
-			//draw_editor(state);
-			//gfx_SwapDraw();
+			draw_editor(state);
+			gfx_SwapDraw();
 			open_file(state);
 			break;
 		case KEY_STATE:
 			break;
 		}
 	}
+	return 0;
 }
 
 void cursor_to_start_select(struct estate *state)
@@ -538,10 +547,13 @@ void cursor_to_right_word_select(struct estate *state)
     }
 }
 
-int draw_editor_full(struct estate *state)
+
+int draw_editor(struct estate *state)
 {
-	gfx_SetDrawBuffer();
-    gfx_FillScreen(state->background_color);
+	// Number of pixels between the left border and the first character of a line 
+	const uint8_t left_offset = 2;
+
+	gfx_FillScreen(state->background_color);
 	//Initialize temporary variables
 	int24_t i = state->scr_offset;
 	int8_t row = 0;
@@ -550,8 +562,7 @@ int draw_editor_full(struct estate *state)
 	bool drawn = false;
 	//Start drawing
 	fontlib_SetForegroundColor(state->text_color);
-	fontlib_SetCursorPosition(0, LINE_SPACING);
-	fontlib_DrawGlyph(state->scr_line_offset ? '+' : ':');
+	fontlib_SetCursorPosition(left_offset, LINE_SPACING);
 	//Iterate buffer
 	while (i < MAX_BUFFER_SIZE && (cp < MAX_BUFFER_SIZE - state->c2 + state->c1) && row < NUM_LINES + 1)
 	{
@@ -568,10 +579,9 @@ int draw_editor_full(struct estate *state)
 			}
 			else
 			{
-				gfx_VertLine_NoClip((FONT_WIDTH + FONT_WIDTH * col),
+				gfx_VertLine_NoClip(left_offset + FONT_WIDTH * col,
 									LINE_SPACING * row + LINE_SPACING + 1, LINE_SPACING);
-				state->cx = (FONT_WIDTH + FONT_WIDTH * col), state->cy =
-																 LINE_SPACING * row + LINE_SPACING + 1;
+				state->cx = left_offset + FONT_WIDTH * col, state->cy = LINE_SPACING * row + LINE_SPACING + 1;
 			}
 
 			i = state->c2 + 1;
@@ -586,8 +596,7 @@ int draw_editor_full(struct estate *state)
 			col = 0;
 			i++;
 			cp++;
-			fontlib_SetCursorPosition(0, LINE_SPACING * row + LINE_SPACING);
-			fontlib_DrawGlyph(':');
+			fontlib_SetCursorPosition(left_offset, LINE_SPACING * row + LINE_SPACING);
 			continue;
 		}
 		if (state->selection_active && ((state->selection_anchor <= i && i < state->c1) || (state->selection_anchor >= i && i > state->c2)))
@@ -611,8 +620,7 @@ int draw_editor_full(struct estate *state)
 		{
 			col = 0;
 			row++;
-			fontlib_SetCursorPosition(FONT_WIDTH,
-									  LINE_SPACING * row + LINE_SPACING);
+			fontlib_SetCursorPosition(left_offset, LINE_SPACING * row + LINE_SPACING);
 		}
 	}
 	fontlib_SetForegroundColor(state->statusbar_text_color);
@@ -627,16 +635,16 @@ int draw_editor_full(struct estate *state)
 	gfx_FillRectangle_NoClip(193, 228, 62, 12);
 	gfx_FillRectangle_NoClip(257, 228, 62, 12);
 	//Draw text on segs
-	fontlib_SetCursorPosition(20, 228);
-	fontlib_DrawString("Cut");
-	fontlib_SetCursorPosition(80, 226);
-	fontlib_DrawString("Copy");
+	fontlib_SetCursorPosition(4, 228);
+	fontlib_DrawString("Options");
+	fontlib_SetCursorPosition(76, 228);
+	fontlib_DrawString("# $ &");
 	fontlib_SetCursorPosition(140, 228);
-	fontlib_DrawString("Paste");
-	fontlib_SetCursorPosition(200, 228);
-	fontlib_DrawString("Search");
-	fontlib_SetCursorPosition(272, 228);
-	fontlib_DrawString("Menu");
+	fontlib_DrawString("Tools");
+	fontlib_SetCursorPosition(209, 228);
+	fontlib_DrawString("Home");
+	fontlib_SetCursorPosition(276, 228);
+	fontlib_DrawString("Run");
 	//Draw drop shadows
 	gfx_SetColor(state->dropshadow_color);
 	gfx_VertLine_NoClip(63, 229, 11);
@@ -649,15 +657,29 @@ int draw_editor_full(struct estate *state)
 
 	//Draw top text
 	fontlib_SetCursorPosition(0, 0);
-	if (!state->saved)
+	fontlib_DrawString("Line: ");
+	fontlib_DrawInt(state->lc1 + 1, 4);
+
+	
+	if (!state->saved) {
+		fontlib_SetCursorPosition(104, 0);
 		fontlib_DrawGlyph('*');
-	fontlib_DrawString(state->named ? state->filename : "Untitled Document");
-	if (!state->saved)
-		fontlib_DrawGlyph('*');
+	}
+	
+	fontlib_SetCursorPosition(120, 0);
+	fontlib_DrawString(state->named ? state->filename : "New script");
+
+	fontlib_SetCursorPosition(280, 0);
+	if (state->alpha_state == 1) {
+		fontlib_DrawString("alpha");
+	}
+	else if (state->alpha_state == 2) {
+		fontlib_DrawString("ALPHA");
+	}
+
 	fontlib_SetForegroundColor(state->text_color);
 	fontlib_SetBackgroundColor(state->text_highlight_color);
 	fontlib_SetTransparency(true);
-	gfx_BlitBuffer();
 	if (!drawn)
 	{
 		if (state->c1 < state->scr_offset)
@@ -668,159 +690,30 @@ int draw_editor_full(struct estate *state)
 		{
 			scroll_down(state);
 		}
-		//gfx_SwapDraw();
-		draw_editor_full(state);
+		gfx_SwapDraw();
+		draw_editor(state);
 	}
 
 	//fontlib_DrawInt(state->selection_anchor, 5);
 	return 0;
-
 }
 
-int draw_editor(struct estate *state)
-{
-	//Initialize temporary variables
-	int24_t i = state->scr_offset;
-	int8_t row = 0;
-	int8_t col = 0;
-	int24_t cp = 0;
-	bool drawn = false;
-	//Start drawing
-	gfx_SetDrawBuffer();
-	fontlib_SetForegroundColor(state->text_color);
-	fontlib_SetBackgroundColor(state->background_color);
-	fontlib_SetCursorPosition(0, LINE_SPACING);
-	gfx_SetColor(state->background_color);
-	gfx_FillRectangle(0, LINE_SPACING * row + LINE_SPACING, 320, 226 - LINE_SPACING);
-	fontlib_DrawGlyph(state->scr_line_offset ? '+' : ':');
-	//Iterate buffer
-	while (i < MAX_BUFFER_SIZE && (cp < MAX_BUFFER_SIZE - state->c2 + state->c1) && row < NUM_LINES + 1)
-	{
-		fontlib_SetForegroundColor(state->text_color);
-		fontlib_SetBackgroundColor(state->background_color);
-		// fontlib_SetBackgroundColor(state->text_highlight_color);
-		fontlib_SetTransparency(false);
-		if (i == state->c1)
-		{
-			if (col >= NUM_COLS)
-			{
-				gfx_VertLine_NoClip(319, LINE_SPACING * row + FONT_WIDTH + 1,
-									LINE_SPACING);
-				state->cx = 319, state->cy = LINE_SPACING * row + FONT_WIDTH + 1;
-			}
-			else
-			{
-				gfx_VertLine_NoClip((FONT_WIDTH + FONT_WIDTH * col),
-									LINE_SPACING * row + LINE_SPACING + 1, LINE_SPACING);
-				state->cx = (FONT_WIDTH + FONT_WIDTH * col), state->cy =
-																 LINE_SPACING * row + LINE_SPACING + 1;
-			}
+void launch_editor(struct estate* state, char* filename) {
+	
+	strcpy(state->filename, filename);
+	state->named = true;
 
-			i = state->c2 + 1;
-			drawn = 1;
-			if (i >= MAX_BUFFER_SIZE)
-				break;
-		}
+	load_text(state);
+	editor_mainloop(state);
 
-		if (state->text[i] == '\n')
-		{
-			row++;
-			col = 0;
-			i++;
-			cp++;
-			fontlib_SetCursorPosition(0, LINE_SPACING * row + LINE_SPACING);
-			fontlib_DrawGlyph(':');
-			continue;
-		}
-		if (state->selection_active && ((state->selection_anchor <= i && i < state->c1) || (state->selection_anchor >= i && i > state->c2)))
-		{
-			fontlib_SetForegroundColor(state->text_selection_color);
-			fontlib_SetBackgroundColor(state->text_selection_highlight_color);
-			fontlib_SetTransparency(false);
-		}
-		else
-		{
-			fontlib_SetForegroundColor(state->text_color);
-			fontlib_SetBackgroundColor(state->background_color);
-			//fontlib_SetBackgroundColor(state->text_highlight_color);
-			fontlib_SetTransparency(false);
-		}
-		fontlib_DrawGlyph(state->text[i]);
-
-		i++;
-		cp++;
-		col++;
-		if (col >= NUM_COLS)
-		{
-			col = 0;
-			row++;
-			fontlib_SetCursorPosition(FONT_WIDTH,
-									  LINE_SPACING * row + LINE_SPACING);
-		}
-	}
-	fontlib_SetForegroundColor(state->statusbar_text_color);
-	//fontlib_SetBackgroundColor(state->text_highlight_color);
-	fontlib_SetBackgroundColor(state->background_color);
-	fontlib_SetTransparency(true);
-	//Draw statusbars
-	gfx_SetColor(state->statusbar_color);
-	gfx_FillRectangle_NoClip(0, 0, 320, 12);  //Top
-	gfx_FillRectangle_NoClip(1, 228, 62, 12); //Floating segments
-	gfx_FillRectangle_NoClip(65, 228, 62, 12);
-	gfx_FillRectangle_NoClip(129, 228, 62, 12);
-	gfx_FillRectangle_NoClip(193, 228, 62, 12);
-	gfx_FillRectangle_NoClip(257, 228, 62, 12);
-	//Draw text on segs
-	fontlib_SetCursorPosition(20, 226);
-	fontlib_DrawString("Cut");
-	fontlib_SetCursorPosition(80, 226);
-	fontlib_DrawString("Copy");
-	fontlib_SetCursorPosition(140, 226);
-	fontlib_DrawString("Paste");
-	fontlib_SetCursorPosition(200, 226);
-	fontlib_DrawString("Search");
-	fontlib_SetCursorPosition(272, 226);
-	fontlib_DrawString("Menu");
-	//Draw drop shadows
-	gfx_SetColor(state->dropshadow_color);
-	gfx_VertLine_NoClip(63, 229, 11);
-	gfx_VertLine_NoClip(127, 229, 11);
-	gfx_VertLine_NoClip(191, 229, 11);
-	gfx_VertLine_NoClip(255, 229, 11);
-	gfx_VertLine_NoClip(319, 229, 11);
-	//Top
-	gfx_HorizLine_NoClip(0, 12, 320);
-
-	//Draw top text
-	fontlib_SetCursorPosition(0, 0);
-	if (!state->saved)
-		fontlib_DrawGlyph('*');
-	fontlib_DrawString(state->named ? state->filename : "Untitled Document");
-	if (!state->saved)
-		fontlib_DrawGlyph('*');
-	fontlib_SetForegroundColor(state->text_color);
-	fontlib_SetBackgroundColor(state->text_highlight_color);
-	fontlib_SetTransparency(true);
-	if (!drawn)
-	{
-		if (state->c1 < state->scr_offset)
-		{
-			scroll_up(state);
-		}
-		else
-		{
-			scroll_down(state);
-		}
-		//gfx_SwapDraw();
-		draw_editor(state);
-	} else {
-		gfx_BlitBuffer();
-		gfx_SetDrawScreen();
-	}
-
-	//fontlib_DrawInt(state->selection_anchor, 5);
-	return 0;
-	// return draw_editor_full(state);
+	state->lc1 = 0;
+	state->lc2 = MAX_BUFFER_SIZE - 1;
+	state->lc_offset = 0;
+	state->ls_offset = 0;
+	state->c1 = 0;
+	state->c2 = MAX_BUFFER_SIZE - 1;
+	state->scr_offset = 0;
+	state->scr_line_offset = 0;
 }
 
 void editor_mainloop(struct estate *state)
@@ -829,20 +722,22 @@ void editor_mainloop(struct estate *state)
 	while (true)
 	{
 		draw_editor(state);
-		//gfx_SwapDraw();
+		gfx_SwapDraw();
 		k = ngetchx_xy(state, state->cx, state->cy);
 		if (k == KEY_CLEAR)
 		{
 			//Rely on short circuit
             //First do this to remove other dialog artifacts
             draw_editor(state);
-            //gfx_SwapDraw();
-			if (state->saved || show_unsaved_dialog(state))
-			{
+            gfx_SwapDraw();
+			if (state->saved || show_unsaved_dialog(state)) {
 				break;
 			}
 		}
-		handle_key(state, k);
+		int res = handle_key(state, k);
+		
+		if (res != 0)
+			break;
 	}
 }
 
@@ -1032,54 +927,32 @@ void cursor_to_l_end(struct estate *state)
 
 void load_text(struct estate *state)
 {
-#ifdef BOS_BUILD
-	void *fd = fs_OpenFile(state->filename);
-	if (fd != -1)
-	{
-		char *ptr = fs_GetFDPtr(fd);
-		char *end = &ptr[fs_GetFDLen(fd)];
-		while (ptr < end)
-		{
-			insert_char(state, *ptr);
-			ptr++;
-		}
-	}
-#else
 	ti_var_t var;
 	var = ti_Open(state->filename, "r");
-	if (var == 0)
-	{
+	if (var == 0) {
 		return; //no error out
 	}
+
+	char buffer[5];
+	ti_Read(buffer, 5, 1, var);
+	if (strncmp(buffer, "NEON\x00", 5) != 0) {
+		for (int i=0 ; i < 5 ; i++) {
+			insert_char(state, buffer[i]);
+		}
+	}
+
 	char c;
 	while ((c = ti_GetC(var)) != EOF)
 	{
 		insert_char(state, c);
 	}
 	ti_Close(var);
-#endif
 	state->saved = true;
 }
 
 void write_file(struct estate *state)
 {
 	int24_t fullsize = state->c1 + (MAX_BUFFER_SIZE - (state->c2 + 1));
-#ifdef BOS_BUILD
-	void *fd = fs_OpenFile(state->filename);
-	if (fd == -1)
-	{
-		fd = fs_CreateFile(state->filename, 0, fullsize);
-	}
-	else
-	{
-		fd = fs_SetSize(fullsize, fd);
-	}
-	if (fullsize > 0)
-	{
-		fd = fs_Write(state->text, state->c1, 1, fd, 0);
-		fd = fs_Write(&state->text[state->c2 + 1], MAX_BUFFER_SIZE - (state->c2 + 1), 1, fd, state->c1);
-	}
-#else
 
 	ti_var_t var;						 /*
     var = ti_Open(state->filename, "r");*/
@@ -1091,6 +964,11 @@ void write_file(struct estate *state)
 	//int i = 0;
 	var = ti_Open(state->filename, "w");
 	ti_Resize(fullsize, var); //makes saving a lot faster due to only needing to resize the variable once
+
+	if (!string_equal(state, 0, "#NEON")) {
+		ti_Write("NEON\x00", 5, 1, var);
+	}
+
 	ti_Write(state->text, state->c1, 1, var);
 	ti_Write(state->text + state->c2 + 1, MAX_BUFFER_SIZE - (state->c2 + 1), 1, var);
 	/*while (i < MAX_BUFFER_SIZE) {
@@ -1118,156 +996,18 @@ void write_file(struct estate *state)
 		ti_SetArchiveStatus(current_archive_status, var);
 	}
 	ti_Close(var);
-#endif
 	state->saved = true;
 }
 
 /**
-Parse the CEDITRC file.
+Parse the NEIDERC file.
 
 
 
 */
 void parseRC(struct estate *state)
 {
-#ifdef BOS_BUILD
-	void *fd = fs_OpenFile("/etc/config/cedit/CEDITRC");
-	if (fd == -1) {
-		if (fs_OpenFile("/etc/config/cedit") == -1)
-			fs_CreateDir("/etc/config/cedit", 0x10);
-		fd = fs_CreateFile("/etc/config/cedit/CEDITRC", 0, strlen(default_ceditrc_data));
-		if (fd != -1)
-			fs_WriteRaw(default_ceditrc_data, strlen(default_ceditrc_data), 1, fd, 0);
-	} else {
-		void *ptr = fs_GetFDPtr(fd);
-		if (ptr != -1) {
-			void *end = &ptr[fs_GetFDLen(fd)];
-			do
-			{
-				if (0 == strncmp(ptr, "TC:", 3))
-				{
-					int val = atoi(ptr + 3);
-					if (val < 256 && val >= 0)
-					{
-						state->text_color = val;
-					}
-				}
-				else if (0 == strncmp(ptr, "THC:", 4))
-				{
-					int val = atoi(ptr + 4);
-					if (val < 256 && val >= 0)
-					{
-						state->text_highlight_color = val;
-					}
-				}
-				else if (0 == strncmp(ptr, "TSC:", 4))
-				{
-					int val = atoi(ptr + 4);
-					if (val < 256 && val >= 0)
-					{
-						state->text_selection_color = val;
-					}
-				}
-				else if (0 == strncmp(ptr, "TSHC:", 5))
-				{
-					int val = atoi(ptr + 5);
-					if (val < 256 && val >= 0)
-					{
-						state->text_selection_highlight_color = val;
-					}
-				}
-				else if (0 == strncmp(ptr, "BGC:", 4))
-				{
-					int val = atoi(ptr + 4);
-					if (val < 256 && val >= 0)
-					{
-						state->background_color = val;
-					}
-				}
-				else if (0 == strncmp(ptr, "TRC:", 4))
-				{
-					int val = atoi(ptr + 4);
-					if (val < 256 && val >= 0)
-					{
-						state->transparent_color = val;
-					}
-				}
-				else if (0 == strncmp(ptr, "SBC:", 4))
-				{
-					int val = atoi(ptr + 4);
-					if (val < 256 && val >= 0)
-					{
-						state->statusbar_color = val;
-					}
-				}
-				else if (0 == strncmp(ptr, "SBTC:", 5))
-				{
-					int val = atoi(ptr + 5);
-					if (val < 256 && val >= 0)
-					{
-						state->statusbar_text_color = val;
-					}
-				}
-				else if (0 == strncmp(ptr, "TSHC:", 5))
-				{
-					int val = atoi(ptr + 5);
-					if (val < 256 && val >= 0)
-					{
-						state->text_selection_highlight_color = val;
-					}
-				}
-				else if (0 == strncmp(ptr, "BC:", 3))
-				{
-					int val = atoi(ptr + 3);
-					if (val < 256 && val >= 0)
-					{
-						state->border_color = val;
-					}
-				}
-				else if (0 == strncmp(ptr, "DSC:", 4))
-				{
-					int val = atoi(ptr + 4);
-					if (val < 256 && val >= 0)
-					{
-						state->dropshadow_color = val;
-					}
-				}
-				else if (0 == strncmp(ptr, "FC:", 3))
-				{
-					int val = atoi(ptr + 3);
-					if (val < 256 && val >= 0)
-					{
-						state->focus_color = val;
-					}
-				}
-				else if (0 == strncmp(ptr, "AA:", 3))
-				{
-					int val = atoi(ptr + 3);
-					if (val)
-					{
-						state->autoarchive = 1;
-					}
-				}
-				else if (0 == strncmp(ptr, "CB:", 3))
-				{
-					int val = atoi(ptr + 3);
-					state->blinkcursor = (val > 0);
-				}
-				else if (0==strncmp(ptr, "HSF:",4))
-				{
-					int val = atoi(ptr + 4);
-					state->hide_special_files = (val > 0);
-				}
-				ptr = memchr(ptr, '\n', end-ptr);
-				if (ptr)
-					ptr++;
-				else
-					break;
-			} while (1);
-		}
-	}
-#else
-	FILE *f = fopen("CEDITRC", "r");
+	FILE *f = fopen("NEIDERC", "r");
 	if (!f)
 		return;
 	char buffer[256];
@@ -1393,5 +1133,4 @@ void parseRC(struct estate *state)
         }
 	}
 	fclose(f);
-#endif
 }

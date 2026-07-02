@@ -28,6 +28,8 @@
 #include "gfx.h"
 #include "tigcclib.h"
 
+bool string_equal(struct estate *state, int24_t pointer, char* str);
+
 /*
  * Displays the editor settings:
  * tabstop, preserve clipboard on exit,
@@ -43,14 +45,26 @@ void show_appearance_settings_dialog(struct estate *);
  * Draws the main menu
  * The main menu will open various sub-dialogs for additional settings/options.
  * They will open on top of each other.
+ * Returns -1 if need to exit editor
  */
-void show_menu_dialog(struct estate *);
+int show_options_dialog(struct estate *);
 
 /*
  * The backend drawing for the menu. Used to restore state after being
  * damaged by submenus, and for smaller drawing routines.
  */
-void menu_backend_draw(struct estate *, int);
+void options_backend_draw(struct estate *, int);
+
+
+void show_tools_dialog(struct estate *);
+void tools_backend_draw(struct estate *, int);
+void show_chars_dialog(struct estate* state);
+void chars_backend_draw(struct estate* state, int line, int col, int n_lines, int n_columns);
+char* show_create_dialog(struct estate *state);
+void show_file_menu_dialog(struct estate *state, char* filename);
+void alert(struct estate *state, char* title, char* text);
+void show_unimplemented_dialog(struct estate *state);
+bool show_confirm_dialog(struct estate *state);
 
 /*
  * Draws a dialog with an empty background

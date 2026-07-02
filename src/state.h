@@ -25,11 +25,8 @@
 /*
  * The max chars in the buffer
  */
-#ifdef BOS_BUILD
-#define MAX_BUFFER_SIZE 65536
-#else
-#define MAX_BUFFER_SIZE 76800//16384//65536
-#endif
+
+#define MAX_BUFFER_SIZE 16384//65536
 
 /*
  * The default font width
@@ -47,7 +44,7 @@
  */
 #define NUM_LINES 17
 
-#define NUM_COLS 38
+#define NUM_COLS 39
 
 /*
  * The state of the editor.
@@ -56,11 +53,7 @@ struct estate {
 	//Number of lines multi movements move by
 	int24_t multi_lines;
 	//The file name
-#ifdef BOS_BUILD
-	char *filename;
-#else
 	char filename[10];
-#endif
 	//Whether the file name is user defined
 	bool named;
 	//A pointer within the line array. Same line as cursor.
@@ -93,11 +86,7 @@ struct estate {
 	uint8_t border_color;
 	uint8_t dropshadow_color;
 	uint8_t focus_color;
-#ifdef BOS_BUILD
-	char *fontname;
-#else
 	char fontname[10];
-#endif
 	int8_t fonttype;
 	fontlib_font_t *font;
     ti_var_t clipboard_file;
@@ -116,18 +105,16 @@ struct estate {
 	//True if the selection is active, otherwise false.
 	bool selection_active;
 
+	//0: inactive, 1: lower case, 2: uppercase
+	uint8_t alpha_state;
+
 	//These are best put at the end of the struct
 	//Text buffer
 	//char text[16385];
 	//Gonna make it 64Kb.
-	//char text[MAX_BUFFER_SIZE];
-    char* text;
+	char text[MAX_BUFFER_SIZE];
 	//Line len buffer
-#ifdef BOS_BUILD
-	int16_t *lines;
-#else
-	int16_t lines[10000];
-#endif
+	int24_t lines[10000];
 	//Data in the clipboard
 	//char clipboard_data[10000];
 	///////////////////////////Random Editor Settings///////////////////////////

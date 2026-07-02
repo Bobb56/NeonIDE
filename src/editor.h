@@ -30,6 +30,9 @@ void cursor_up_select(struct estate *);
 void cursor_down_select(struct estate *);
 void cursor_left_select(struct estate *);
 void cursor_right_select(struct estate *);
+
+void launch_editor(struct estate* state, char* filename);
+
 /*
  * Event loop
  */
@@ -57,7 +60,7 @@ int draw_editor(struct estate *);
  * Handles a non-quit keypress
  * Arguments:
  */
-void handle_key(struct estate *, short);
+int handle_key(struct estate *, short);
 
 /*
  * Inserts a new line into the line buffer.
@@ -182,7 +185,5 @@ void write_file(struct estate *);
 
 //Load data from RC file
 void parseRC(struct estate *);
-
-int draw_editor_full(struct estate*);
 
 #endif /* SRC_EDITOR_H_ */

@@ -27,20 +27,11 @@
 #include "editor.h"
 #include "dialogs.h"
 #include "gfx.h"
-#ifndef BOS_BUILD
 #include "libmalloc.h"
-#endif
 
-#ifdef BOS_BUILD
-#define CEDIT_VERSION_STRING "CEDIT 1.01 BOS"
-#else
-#define CEDIT_VERSION_STRING "CEDIT 1.01 TIOS"
-#endif
 
-/*
- * Main function
- */
-int main(int, char **);
+#define NEONIDE_VERSION_STRING "NeonIDE 1.0"
+
 
 /*
  * Initializes the editor
@@ -48,7 +39,7 @@ int main(int, char **);
 bool initialize(struct estate *);
 
 /*
- * Parse the CEDITRC file, if it exists, and do stuff.
+ * Parse the NEIDERC file, if it exists, and do stuff.
  */
 void parse_rc(struct estate *);
 

@@ -2,9 +2,9 @@
 # Makefile Options
 # ----------------------------
 
-NAME = CEDIT
+NAME = NEONIDE
 ICON = icon.png
-DESCRIPTION = "CEdit editor"
+DESCRIPTION = "Neon IDE"
 COMPRESSED = YES
 ARCHIVED = YES
 

@@ -16,6 +16,5 @@
 #include <fontlibc.h>
 
 void* malloc_noheap(size_t size);
-void* malloc_noheap_safe(size_t, char*);
 
 #endif /*LIBMALLOC_H*/

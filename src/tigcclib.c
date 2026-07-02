@@ -4,6 +4,7 @@
  *  Created on: Jul 25, 2021
  *      Author: michael
  */
+
 #include "tigcclib.h"
 
 /*
@@ -38,7 +39,7 @@ short ksec[] = { KEY_NO_EXIST, KEY_WDOWN, KEY_WLEFT, KEY_WRIGHT, KEY_WUP,
  */
 short kalpha[] = { KEY_NO_EXIST, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP,
                    KEY_NO_EXIST, KEY_NO_EXIST, KEY_NO_EXIST, KEY_NO_EXIST, '\n', '"', 'w',
-                   'r', 'm', 'h', KEY_TAB, KEY_NO_EXIST, '?', '_', 'v', 'q', 'l', 'g',
+                   'r', 'm', 'h', KEY_CLEAR, KEY_NO_EXIST, '?', '_', 'v', 'q', 'l', 'g',
                    KEY_UNBOUND, KEY_NO_EXIST, ':', 'z', 'u', 'p', 'k', 'f', 'c',
                    KEY_NO_EXIST, ' ', 'y', 't', 'o', 'j', 'e', 'b', KEY_NO_EXIST,
                    KEY_RESERVED, 'x', 's', 'n', 'i', 'd', 'a', KEY_NO_EXIST, KEY_F5,
@@ -112,7 +113,7 @@ uint8_t ngetchx_backend(void) {
     for (uint8_t key = 1, group = 7; group; --group) {
         for (uint8_t mask = 1; mask; mask <<= 1, ++key) {
             if (kb_Data[group] & mask) {
-                if (key == 40 || key == 48 || key == 54 || key == 55)
+                if (key == 40 || key == 54 || key == 55)
                     continue;
                 if (only_key) {
                     last_key = 0;
@@ -160,12 +161,11 @@ short ngetchx(void) {
     }
 }
 
-short ngetchx_xy(struct estate *state,int cx, int cy) {
+short ngetchx_xy(struct estate *state, int cx, int cy) {
     uint8_t k = 0;
     int frame = 0;
     bool on = true;
-    bool old_draw_loc = gfx_GetDraw();
-	//gfx_SetDrawScreen();
+    gfx_SetDrawScreen();
     gfx_SetColor(state->text_color);
     gfx_VertLine_NoClip(cx,cy,12);
 
@@ -185,7 +185,12 @@ short ngetchx_xy(struct estate *state,int cx, int cy) {
                 }
             }
     }
-    gfx_SetDraw(old_draw_loc);
+    gfx_SetDrawBuffer();
+
+    if (kb_IsDown(kb_KeyAlpha)) {
+        state->alpha_state = (state->alpha_state + 1)%3;
+    }
+
     if (kb_IsDown(kb_Key2nd) && kb_IsDown(kb_KeyGraphVar)) {
         return ksecshift[k];
     } else if (kb_IsDown(kb_KeyMode) && kb_IsDown(kb_KeyGraphVar)) {
@@ -194,12 +199,11 @@ short ngetchx_xy(struct estate *state,int cx, int cy) {
         return kmeta[k];
     } else if (kb_IsDown(kb_Key2nd)) {
         return ksec[k];
-    } else if (kb_IsDown(kb_KeyGraphVar)) {
+    } else if (kb_IsDown(kb_KeyGraphVar) || state->alpha_state == 2) {
         return kshift[k];
-    } else if (kb_IsDown(kb_KeyAlpha)) {
+    } else if (state->alpha_state == 1) {
         return kalpha[k];
     } else {
         return kmain[k];
     }
 }
-
