@@ -55,16 +55,19 @@ int show_options_dialog(struct estate *);
  */
 void options_backend_draw(struct estate *, int);
 
-
-void show_tools_dialog(struct estate *);
-void tools_backend_draw(struct estate *, int);
-void show_chars_dialog(struct estate* state);
+void show_console_tools_dialog(struct estate *);
+void console_tools_backend_draw(struct estate *, int);
+void show_editor_tools_dialog(struct estate *);
+void editor_tools_backend_draw(struct estate *, int);
+void show_chars_dialog(struct estate* state, void (*draw_background)(struct estate*));
 void chars_backend_draw(struct estate* state, int line, int col, int n_lines, int n_columns);
 char* show_create_dialog(struct estate *state);
 void show_file_menu_dialog(struct estate *state, char* filename);
 void alert(struct estate *state, char* title, char* text);
 void show_unimplemented_dialog(struct estate *state);
 bool show_confirm_dialog(struct estate *state);
+
+bool draw_text_area(struct estate* state);
 
 /*
  * Draws a dialog with an empty background

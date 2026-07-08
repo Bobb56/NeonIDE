@@ -6,11 +6,24 @@
  *      Edited for BOS by Beck
  */
 
+
+/*
+TODO:
+- Check that we correctly free each state before leaving
+- Add history line saving
+*/
+
+
+
+
 #include "cedit.h"
 #include "home.h"
 #include "state.h"
+#include "console.h"
+#include <stdlib.h>
 
-bool initialize(struct estate *state)
+
+static bool initialize(struct estate *state)
 {
     memset(state->search_buffer,0,255);
 	//Default is false, if true, files will be archived after writes. Does nothing on BOS.
@@ -33,11 +46,11 @@ bool initialize(struct estate *state)
 	state->multi_lines = 5;
 	state->named = false;
 	state->lc1 = 0;
-	state->lc2 = MAX_BUFFER_SIZE - 1;
+	state->lc2 = state->max_buffer_size - 1;
 	state->lc_offset = 0;
 	state->ls_offset = 0;
 	state->c1 = 0;
-	state->c2 = MAX_BUFFER_SIZE - 1;
+	state->c2 = state->max_buffer_size - 1;
 	state->scr_offset = 0;
 	state->scr_line_offset = 0;
 	state->text_color = 0;
@@ -63,8 +76,8 @@ bool initialize(struct estate *state)
 	state->font = 0;
 	state->fonttype = 3;
     state->hide_special_files=1;
-	//state->text=malloc_noheap(MAX_BUFFER_SIZE);
-	//state->text = malloc(MAX_BUFFER_SIZE);
+	//state->text=malloc_noheap(state->max_buffer_size);
+	//state->text = malloc(state->max_buffer_size);
 	//Temporary workaround to avoid buffer being yeeted by fileIO.
 
 
@@ -84,27 +97,48 @@ bool initialize(struct estate *state)
 	fontlib_SetForegroundColor(state->text_color);
 	fontlib_SetTransparency(true);
 	fontlib_SetBackgroundColor(state->text_highlight_color);
-
+	
+	// Read the parameters from the user configuration file
+	parseRC(state);
 	return 0;
 }
 
+void initialize_editor(struct estate* state) {
+	state->max_buffer_size = 16384;
+	state->max_lines = 10000;
+	state->text = malloc(state->max_buffer_size);
+	state->lines = malloc(state->max_lines * sizeof(int24_t));
+	initialize(state);
+}
 
+
+void initialize_console(struct estate* state) {
+	state->max_buffer_size = NUM_LINES * NUM_COLS * 2;
+	state->max_lines = NUM_LINES * 2;
+	state->text = malloc(state->max_buffer_size);
+	state->lines = malloc(state->max_lines * sizeof(int24_t));
+	initialize(state);
+}
+
+void initialize_void(struct estate* state) {
+	state->lines = NULL;
+	state->text = NULL;
+	state->max_lines = 0;
+	state->max_buffer_size = 0;
+	initialize(state);
+}
+
+void deinit_state(struct estate* state) {
+	free(state->lines);
+	free(state->text);
+}
 
 
 int main(void)
 {
 	gfx_Begin();
 
-	static struct estate editor_state;
-	if (initialize(&editor_state)) {
-		ngetchx();
-		gfx_End();
-		exit(0);
-	}
-	parseRC(&editor_state);
-	
-	home_menu(&editor_state);
-	//launch_editor(&editor_state, NULL);
+	home_menu();
 	
 	gfx_End();
 	return 0;

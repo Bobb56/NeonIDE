@@ -31,7 +31,7 @@ void cursor_down_select(struct estate *);
 void cursor_left_select(struct estate *);
 void cursor_right_select(struct estate *);
 
-void launch_editor(struct estate* state, char* filename);
+void launch_editor(char* filename);
 
 /*
  * Event loop
@@ -54,13 +54,7 @@ bool is_control(short);
  * Returns true if the cursor was drawn on the screen,
  * false otherwise.
  */
-int draw_editor(struct estate *);
-
-/*
- * Handles a non-quit keypress
- * Arguments:
- */
-int handle_key(struct estate *, short);
+void draw_editor(struct estate *);
 
 /*
  * Inserts a new line into the line buffer.

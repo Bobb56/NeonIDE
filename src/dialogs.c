@@ -29,7 +29,7 @@ You may use version 2.1 or later only.
 
 
 bool string_equal(struct estate *state, int24_t pointer, char* str) {
-	while (*str && pointer < MAX_BUFFER_SIZE - 1) {
+	while (*str && pointer < state->max_buffer_size - 1) {
 		if (*str != state->text[pointer])
 			return false;
 
@@ -49,7 +49,7 @@ bool string_equal(struct estate *state, int24_t pointer, char* str) {
 void perform_search(struct estate *state)
 {
 	int pointer = 0;
-	while (pointer < MAX_BUFFER_SIZE - (int)strlen(state->search_buffer))
+	while (pointer < state->max_buffer_size - (int)strlen(state->search_buffer))
 	{
 		if (string_equal(state, pointer, state->search_buffer))
 		{
@@ -161,14 +161,8 @@ void goto_line(struct estate* state, int24_t line_number) {
 		}
 	}
 	else if (state->lc1 + 1 < line_number) {
-		int24_t old_lc1 = state->lc1;
-		while (state->lc1 + 1 < line_number) {
+		while (state->lc1 + 1 < line_number && state->c2 < state->max_buffer_size - 1) {
 			cursor_down(state);
-
-			if (state->lc1 == old_lc1)
-				break;
-			else
-				old_lc1 = state->lc1;
 		}
 	}
 }
@@ -718,10 +712,48 @@ void show_appearance_settings_dialog_nocolor(struct estate *state)
 	}
 }
 
+
+
 /*
  * Draws the Tools menu given the state parameters and the selection index
  */
-void tools_backend_draw(struct estate *state, int index)
+void console_tools_backend_draw(struct estate *state, int index)
+{
+	draw_dialog(state, 100, 145, 110, 73);
+	gfx_SetColor(state->border_color);
+	gfx_HorizLine_NoClip(100, 165, 110);
+	fontlib_SetCursorPosition(125, 150);
+	fontlib_SetForegroundColor(state->text_color);
+	fontlib_DrawString("Tools");
+	fontlib_SetCursorPosition(106, 170);
+	if (index == 0)
+	{
+		fontlib_SetForegroundColor(state->focus_color);
+	}
+	fontlib_DrawString("1) Copy");
+	fontlib_SetForegroundColor(state->text_color);
+	fontlib_SetCursorPosition(106, 185);
+	if (index == 1)
+	{
+		fontlib_SetForegroundColor(state->focus_color);
+	}
+	fontlib_DrawString("2) Cut");
+	fontlib_SetForegroundColor(state->text_color);
+	fontlib_SetCursorPosition(106, 200);
+	if (index == 2)
+	{
+		fontlib_SetForegroundColor(state->focus_color);
+	}
+	fontlib_DrawString("3) Paste");
+	fontlib_SetForegroundColor(state->text_color);
+}
+
+
+
+/*
+ * Draws the Tools menu given the state parameters and the selection index
+ */
+void editor_tools_backend_draw(struct estate *state, int index)
 {
 	draw_dialog(state, 100, 115, 110, 103);
 	gfx_SetColor(state->border_color);
@@ -831,7 +863,7 @@ void chars_backend_draw(struct estate* state, int line, int col, int n_lines, in
 }
 
 
-void show_chars_dialog(struct estate* state) {
+void show_chars_dialog(struct estate* state, void (*draw_background)(struct estate*)) {
 	const uint8_t n_lines = 4;
 	const uint8_t n_columns = 4;
 
@@ -884,7 +916,7 @@ void show_chars_dialog(struct estate* state) {
 			if (line * n_columns + col >= n_chars)
 				col = 0;
 		}
-		draw_editor(state);
+		draw_background(state);
 		chars_backend_draw(state, line, col, n_lines, n_columns);
 		gfx_BlitBuffer();
 		k = ngetchx();
@@ -1021,7 +1053,55 @@ int show_options_dialog(struct estate *state)
 
 
 
-void show_tools_dialog(struct estate *state)
+void show_console_tools_dialog(struct estate *state)
+{
+	short k = 0;
+	int index = 0;
+	while (k != KEY_CLEAR && k != KEY_F3)
+	{
+		if (k == '\n' || k == KEY_RIGHT || (k >= '1' && k <= '3'))
+		{
+			if (k >= '1' && k <= '3')
+				index = k - '1';
+
+			switch (index)
+			{
+			case 0:
+				cb_copy(state);
+				return;
+			case 1:
+				cb_cut(state);
+				return;
+			case 2:
+				cb_paste(state);
+				return;
+			}
+		}
+		if (k == KEY_UP)
+		{
+			if (index)
+			{
+				index--;
+			}
+		}
+		if (k == KEY_DOWN)
+		{
+			if (index < 2)
+			{
+				index++;
+			}
+		}
+		console_tools_backend_draw(state, index);
+
+		gfx_BlitBuffer();
+		k = ngetchx();
+	}
+}
+
+
+
+
+void show_editor_tools_dialog(struct estate *state)
 {
 	short k = 0;
 	int index = 0;
@@ -1065,7 +1145,7 @@ void show_tools_dialog(struct estate *state)
 				index++;
 			}
 		}
-		tools_backend_draw(state, index);
+		editor_tools_backend_draw(state, index);
 
 		gfx_BlitBuffer();
 		k = ngetchx();
@@ -1116,6 +1196,88 @@ void draw_dialog(struct estate *state, int x, int y, int w, int h)
 	gfx_FillRectangle_NoClip(x + 1, y + state->corner_radius - 1, w - 2,
 							 h - state->corner_radius - state->corner_radius + 2);
 }
+
+
+bool draw_text_area(struct estate* state) {
+	// Number of pixels between the left border and the first character of a line 
+	const uint8_t left_offset = 2;
+
+	gfx_FillScreen(state->background_color);
+	//Initialize temporary variables
+	int24_t i = state->scr_offset;
+	int8_t row = 0;
+	int8_t col = 0;
+	int24_t cp = 0;
+	bool drawn = false;
+	//Start drawing
+	fontlib_SetForegroundColor(state->text_color);
+	fontlib_SetCursorPosition(left_offset, LINE_SPACING);
+	//Iterate buffer
+	while (i < state->max_buffer_size && (cp < state->max_buffer_size - state->c2 + state->c1) && row < NUM_LINES + 1)
+	{
+		fontlib_SetForegroundColor(state->text_color);
+		fontlib_SetBackgroundColor(state->text_highlight_color);
+		fontlib_SetTransparency(true);
+		if (i == state->c1)
+		{
+			if (col >= NUM_COLS)
+			{
+				gfx_VertLine_NoClip(319, LINE_SPACING * row + FONT_WIDTH + 1,
+									LINE_SPACING);
+				state->cx = 319, state->cy = LINE_SPACING * row + FONT_WIDTH + 1;
+			}
+			else
+			{
+				gfx_VertLine_NoClip(left_offset + FONT_WIDTH * col,
+									LINE_SPACING * row + LINE_SPACING + 1, LINE_SPACING);
+				state->cx = left_offset + FONT_WIDTH * col, state->cy = LINE_SPACING * row + LINE_SPACING + 1;
+			}
+
+			i = state->c2 + 1;
+			drawn = true;
+			if (i >= state->max_buffer_size)
+				break;
+		}
+
+		if (state->text[i] == '\n')
+		{
+			row++;
+			col = 0;
+			i++;
+			cp++;
+			fontlib_SetCursorPosition(left_offset, LINE_SPACING * row + LINE_SPACING);
+			continue;
+		}
+		if (state->selection_active && ((state->selection_anchor <= i && i < state->c1) || (state->selection_anchor >= i && i > state->c2)))
+		{
+			fontlib_SetForegroundColor(state->text_selection_color);
+			fontlib_SetBackgroundColor(state->text_selection_highlight_color);
+			fontlib_SetTransparency(false);
+		}
+		else
+		{
+			fontlib_SetForegroundColor(state->text_color);
+			fontlib_SetBackgroundColor(state->text_highlight_color);
+			fontlib_SetTransparency(true);
+		}
+		fontlib_DrawGlyph(state->text[i]);
+
+		i++;
+		cp++;
+		col++;
+		if (col >= NUM_COLS)
+		{
+			col = 0;
+			row++;
+			fontlib_SetCursorPosition(left_offset, LINE_SPACING * row + LINE_SPACING);
+		}
+	}
+
+	return drawn;
+}
+
+
+
 
 int min(int a, int b)
 {
@@ -1278,7 +1440,8 @@ bool show_open_dialog(struct estate *state)
 			if (state->saved || show_unsaved_dialog(state))
 			{
 				strncpy(state->filename, (char *)arr + 24 * index, 8);
-				initialize(state);
+				deinit_state(state);
+				initialize_editor(state);
 				parseRC(state);
 				load_text(state);
 				state->named = true;

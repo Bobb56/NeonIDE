@@ -10,7 +10,6 @@
 
 #include "state.h"
 
-void home_menu(struct estate* state);
-
+void home_menu(void);
 
 #endif

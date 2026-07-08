@@ -10,6 +10,8 @@
 #include <fileioc.h>
 #include <time.h>
 #include "home.h"
+#include "cedit.h"
+#include "console.h"
 #include "dialogs.h"
 #include "editor.h"
 #include "tigcclib.h"
@@ -49,7 +51,11 @@ int get_files(char* files[]) {
 
 
 
-void home_menu(struct estate* state) {
+void home_menu(void) {
+    struct estate state_struct;
+    struct estate* state = &state_struct;
+    initialize_void(state);
+
     char* files[128];
     int nb_files;
 
@@ -223,11 +229,11 @@ void home_menu(struct estate* state) {
         }
         else if (key == KEY_F3) {
             gfx_SwapDraw();
-            show_unimplemented_dialog(state);
+            start_using_console(NULL);
             gfx_SwapDraw();
         }
         else if (key == KEY_F4) {
-            launch_editor(state, files[start_disp_index + cursor_position]);
+            launch_editor(files[start_disp_index + cursor_position]);
             refresh = true;
         }
         else if (key == KEY_F5) {

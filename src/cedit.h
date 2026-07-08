@@ -32,11 +32,10 @@
 
 #define NEONIDE_VERSION_STRING "NeonIDE 1.0"
 
-
-/*
- * Initializes the editor
- */
-bool initialize(struct estate *);
+void initialize_void(struct estate *state);
+void initialize_editor(struct estate* state);
+void initialize_console(struct estate* state);
+void deinit_state(struct estate* state);
 
 /*
  * Parse the NEIDERC file, if it exists, and do stuff.

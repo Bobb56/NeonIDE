@@ -22,11 +22,6 @@
 #include <keypadc.h>
 #include <fontlibc.h>
 
-/*
- * The max chars in the buffer
- */
-
-#define MAX_BUFFER_SIZE 16384//65536
 
 /*
  * The default font width
@@ -50,10 +45,17 @@
  * The state of the editor.
  */
 struct estate {
+	int24_t max_lines;
+	int24_t max_buffer_size;
+
 	//Number of lines multi movements move by
 	int24_t multi_lines;
 	//The file name
 	char filename[10];
+	//true if we are in REPL, false if we are running a program
+	bool console;
+	//The currently running program
+	char running_program[10];
 	//Whether the file name is user defined
 	bool named;
 	//A pointer within the line array. Same line as cursor.
@@ -112,9 +114,9 @@ struct estate {
 	//Text buffer
 	//char text[16385];
 	//Gonna make it 64Kb.
-	char text[MAX_BUFFER_SIZE];
+	char* text;
 	//Line len buffer
-	int24_t lines[10000];
+	int24_t* lines;
 	//Data in the clipboard
 	//char clipboard_data[10000];
 	///////////////////////////Random Editor Settings///////////////////////////

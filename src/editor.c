@@ -5,6 +5,7 @@
  *      Author: michael
  */
 
+#include "cedit.h"
 #include "dialogs.h"
 #include "editor.h"
 #include "tigcclib.h"
@@ -50,7 +51,7 @@ void insert_char(struct estate *state, char c)
 
 void line_down(struct estate *state)
 {
-	if (state->lc2 < MAX_BUFFER_SIZE)
+	if (state->lc2 < state->max_buffer_size)
 	{
 		state->lc2++;
 		state->lc1++;
@@ -135,7 +136,7 @@ void cursor_right(struct estate *state)
 		while (state->selection_anchor > state->c2 + 2)
 			cursor_right(state);
 	}
-	if (state->c2 < MAX_BUFFER_SIZE - 1)
+	if (state->c2 < state->max_buffer_size - 1)
 	{
 		if (state->lc_offset == state->lines[state->lc1])
 		{
@@ -162,7 +163,7 @@ void cursor_right_select(struct estate *state)
 	{
 		state->selection_anchor = state->c1;
 	}
-	if (state->c2 < MAX_BUFFER_SIZE - 1)
+	if (state->c2 < state->max_buffer_size - 1)
 	{
 		if (state->lc_offset == state->lines[state->lc1])
 		{
@@ -447,14 +448,14 @@ int handle_key(struct estate *state, short k)
 		case KEY_F2:
 			draw_editor(state);
             gfx_SwapDraw();
-			show_chars_dialog(state);
+			show_chars_dialog(state, draw_editor);
 			draw_editor(state);
             gfx_SwapDraw();
 			break;
 		case KEY_F3:
 			draw_editor(state);
             gfx_SwapDraw();
-			show_tools_dialog(state);
+			show_editor_tools_dialog(state);
 			draw_editor(state);
             gfx_SwapDraw();
 			break;
@@ -493,7 +494,7 @@ void cursor_to_start_select(struct estate *state)
 }
 void cursor_to_end_select(struct estate *state)
 {
-	while (state->c2 < MAX_BUFFER_SIZE - 1)
+	while (state->c2 < state->max_buffer_size - 1)
 	{
 		cursor_right_select(state);
 	}
@@ -539,90 +540,18 @@ void cursor_to_left_word_select(struct estate *state)
 
 void cursor_to_right_word_select(struct estate *state)
 {
-    while(state->c2<MAX_BUFFER_SIZE - 1 && (state->text[state->c2+1]=='\n' || state->text[state->c2+1]==' ')){
+    while(state->c2<state->max_buffer_size - 1 && (state->text[state->c2+1]=='\n' || state->text[state->c2+1]==' ')){
         cursor_right_select(state);
     }
-    while(state->c2<MAX_BUFFER_SIZE - 1 && (state->text[state->c2+1]!='\n' && state->text[state->c2+1]!=' ')){
+    while(state->c2<state->max_buffer_size - 1 && (state->text[state->c2+1]!='\n' && state->text[state->c2+1]!=' ')){
         cursor_right_select(state);
     }
 }
 
 
-int draw_editor(struct estate *state)
+void draw_editor(struct estate *state)
 {
-	// Number of pixels between the left border and the first character of a line 
-	const uint8_t left_offset = 2;
-
-	gfx_FillScreen(state->background_color);
-	//Initialize temporary variables
-	int24_t i = state->scr_offset;
-	int8_t row = 0;
-	int8_t col = 0;
-	int24_t cp = 0;
-	bool drawn = false;
-	//Start drawing
-	fontlib_SetForegroundColor(state->text_color);
-	fontlib_SetCursorPosition(left_offset, LINE_SPACING);
-	//Iterate buffer
-	while (i < MAX_BUFFER_SIZE && (cp < MAX_BUFFER_SIZE - state->c2 + state->c1) && row < NUM_LINES + 1)
-	{
-		fontlib_SetForegroundColor(state->text_color);
-		fontlib_SetBackgroundColor(state->text_highlight_color);
-		fontlib_SetTransparency(true);
-		if (i == state->c1)
-		{
-			if (col >= NUM_COLS)
-			{
-				gfx_VertLine_NoClip(319, LINE_SPACING * row + FONT_WIDTH + 1,
-									LINE_SPACING);
-				state->cx = 319, state->cy = LINE_SPACING * row + FONT_WIDTH + 1;
-			}
-			else
-			{
-				gfx_VertLine_NoClip(left_offset + FONT_WIDTH * col,
-									LINE_SPACING * row + LINE_SPACING + 1, LINE_SPACING);
-				state->cx = left_offset + FONT_WIDTH * col, state->cy = LINE_SPACING * row + LINE_SPACING + 1;
-			}
-
-			i = state->c2 + 1;
-			drawn = true;
-			if (i >= MAX_BUFFER_SIZE)
-				break;
-		}
-
-		if (state->text[i] == '\n')
-		{
-			row++;
-			col = 0;
-			i++;
-			cp++;
-			fontlib_SetCursorPosition(left_offset, LINE_SPACING * row + LINE_SPACING);
-			continue;
-		}
-		if (state->selection_active && ((state->selection_anchor <= i && i < state->c1) || (state->selection_anchor >= i && i > state->c2)))
-		{
-			fontlib_SetForegroundColor(state->text_selection_color);
-			fontlib_SetBackgroundColor(state->text_selection_highlight_color);
-			fontlib_SetTransparency(false);
-		}
-		else
-		{
-			fontlib_SetForegroundColor(state->text_color);
-			fontlib_SetBackgroundColor(state->text_highlight_color);
-			fontlib_SetTransparency(true);
-		}
-		fontlib_DrawGlyph(state->text[i]);
-
-		i++;
-		cp++;
-		col++;
-		if (col >= NUM_COLS)
-		{
-			col = 0;
-			row++;
-			fontlib_SetCursorPosition(left_offset, LINE_SPACING * row + LINE_SPACING);
-		}
-	}
+	bool drawn = draw_text_area(state);
 	fontlib_SetForegroundColor(state->statusbar_text_color);
 	fontlib_SetBackgroundColor(state->text_highlight_color);
 	fontlib_SetTransparency(true);
@@ -695,25 +624,19 @@ int draw_editor(struct estate *state)
 	}
 
 	//fontlib_DrawInt(state->selection_anchor, 5);
-	return 0;
 }
 
-void launch_editor(struct estate* state, char* filename) {
+void launch_editor(char* filename) {
+	struct estate state;
+	initialize_editor(&state);
 	
-	strcpy(state->filename, filename);
-	state->named = true;
+	strcpy(state.filename, filename);
+	state.named = true;
 
-	load_text(state);
-	editor_mainloop(state);
+	load_text(&state);
+	editor_mainloop(&state);
 
-	state->lc1 = 0;
-	state->lc2 = MAX_BUFFER_SIZE - 1;
-	state->lc_offset = 0;
-	state->ls_offset = 0;
-	state->c1 = 0;
-	state->c2 = MAX_BUFFER_SIZE - 1;
-	state->scr_offset = 0;
-	state->scr_line_offset = 0;
+	deinit_state(&state);
 }
 
 void editor_mainloop(struct estate *state)
@@ -788,7 +711,7 @@ void del(struct estate *state)
 			del(state);
 		}
 	}
-	else if (state->c2 < MAX_BUFFER_SIZE - 1)
+	else if (state->c2 < state->max_buffer_size - 1)
 	{
 		if (state->lc_offset == state->lines[state->lc1])
 		{
@@ -867,7 +790,7 @@ void cursor_to_start(struct estate *state)
 
 void cursor_to_end(struct estate *state)
 {
-	while (state->c2 < MAX_BUFFER_SIZE - 1)
+	while (state->c2 < state->max_buffer_size - 1)
 	{
 		cursor_right(state);
 	}
@@ -885,10 +808,10 @@ void cursor_to_left_word(struct estate *state)
 
 void cursor_to_right_word(struct estate *state)
 {
-    while(state->c2<MAX_BUFFER_SIZE - 1 && (state->text[state->c2+1]=='\n' || state->text[state->c2+1]==' ')){
+    while(state->c2<state->max_buffer_size - 1 && (state->text[state->c2+1]=='\n' || state->text[state->c2+1]==' ')){
         cursor_right(state);
     }
-    while(state->c2<MAX_BUFFER_SIZE - 1 && (state->text[state->c2+1]!='\n' && state->text[state->c2+1]!=' ')){
+    while(state->c2<state->max_buffer_size - 1 && (state->text[state->c2+1]!='\n' && state->text[state->c2+1]!=' ')){
         cursor_right(state);
     }
 }
@@ -952,7 +875,7 @@ void load_text(struct estate *state)
 
 void write_file(struct estate *state)
 {
-	int24_t fullsize = state->c1 + (MAX_BUFFER_SIZE - (state->c2 + 1));
+	int24_t fullsize = state->c1 + (state->max_buffer_size - (state->c2 + 1));
 
 	ti_var_t var;						 /*
     var = ti_Open(state->filename, "r");*/
@@ -970,11 +893,11 @@ void write_file(struct estate *state)
 	}
 
 	ti_Write(state->text, state->c1, 1, var);
-	ti_Write(state->text + state->c2 + 1, MAX_BUFFER_SIZE - (state->c2 + 1), 1, var);
-	/*while (i < MAX_BUFFER_SIZE) {
+	ti_Write(state->text + state->c2 + 1, state->max_buffer_size - (state->c2 + 1), 1, var);
+	/*while (i < state->max_buffer_size) {
 		if (i == state->c1)
 			i = state->c2 + 1;
-		if (i >= MAX_BUFFER_SIZE)
+		if (i >= state->max_buffer_size)
 			break;
 		ti_PutC(state->text[i], var);
 		i++;
