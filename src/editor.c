@@ -8,10 +8,9 @@
 #include "cedit.h"
 #include "dialogs.h"
 #include "editor.h"
+#include "state.h"
 #include "tigcclib.h"
 #include "find.h"
-//#include "softc.h"
-
 
 bool is_control(short k)
 {
@@ -739,12 +738,12 @@ void scroll_down(struct estate *state)
 	if (!state->selection_active)
 	{
 		int pre_offset = state->lc_offset;
-		for (int i = 0; i < 17; i++)
+		for (int i = 0; i < NUM_LINES; i++)
 		{
 			cursor_up(state);
 		}
 		scroll_up(state);
-		for (int i = 0; i < 17; i++)
+		for (int i = 0; i < NUM_LINES; i++)
 		{
 			cursor_down(state);
 		}
@@ -760,12 +759,12 @@ void scroll_down(struct estate *state)
 	else
 	{
 		int pre_offset = state->lc_offset;
-		for (int i = 0; i < 17; i++)
+		for (int i = 0; i < NUM_LINES; i++)
 		{
 			cursor_up_select(state);
 		}
 		scroll_up(state);
-		for (int i = 0; i < 17; i++)
+		for (int i = 0; i < NUM_LINES; i++)
 		{
 			cursor_down_select(state);
 		}

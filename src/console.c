@@ -7,6 +7,12 @@
 #include <string.h>
 
 static int fg_color = 0;
+// A global variable that points to the current console
+// that is used by neonide_print and neonide_input
+// Needs to be initialized by a console before using
+// neonide_print and neonide_input and to be deinit after
+// see -> void start_using_console(char* name) { ... }
+static struct estate* global_console_state = NULL;
 
 #define INPUT_MAX_LINES		2
 #define SEQUENCE_ENTREE     ">> "
@@ -96,6 +102,7 @@ void console_scroll(struct estate* state, int nb_lines) {
 	uint8_t line_number = 0;
 	int index = -1;
 	uint8_t col_count = 0;
+	uint8_t history_erase = 0;
 	uint8_t real_line_count = 0; // Counts the number of \n that we will erase
 	while (line_number < nb_lines) {
 		index++;
@@ -105,7 +112,7 @@ void console_scroll(struct estate* state, int nb_lines) {
 			line_number++;
 			real_line_count++;
 		}
-		else if (col_count == NUM_COLS) {
+		else if (col_count == NUM_COLS - 1) {
 			col_count = 0;
 			line_number++;
 		}
@@ -113,12 +120,25 @@ void console_scroll(struct estate* state, int nb_lines) {
 		if (state->text[index] != '\n') {
 			col_count++;
 		}
+
+		// Count how many history line we will delete
+		if (index >= state->history_left[history_erase]) {
+			history_erase++;
+		}
 	}
 
 	state->c1 -= index;
 	state->lc1 -= real_line_count;
 	state->scr_offset -= index;
 	memmove(state->text, state->text + index, state->max_buffer_size - index);
+
+	// Remove history lines that do not exist anymore in the buffer
+	// and update the indices according to the new layout of the console
+	for (int i=0 ; i < state->history_length - history_erase ; i++) {
+		state->history_left[i] = state->history_left[i + history_erase] - index;
+		state->history_right[i] = state->history_right[i + history_erase] - index;
+	}
+	state->history_length -= history_erase;
 }
 
 void scroll_if_needed(struct estate* state) {
@@ -128,25 +148,72 @@ void scroll_if_needed(struct estate* state) {
 }
 
 
-void neonide_print_string(struct estate* state, char* text) {
-	scroll_if_needed(state);
-	cursor_to_end(state);
+void neonide_print_string(char* text) {
+	scroll_if_needed(global_console_state);
+	cursor_to_end(global_console_state);
 
 	while (*text) {
-		insert_char(state, *text);
+		insert_char(global_console_state, *text);
 		text++;
 	}
-	draw_console(state);
+	draw_console(global_console_state);
 	gfx_SwapDraw();
 }
 
 
-void history_next_line(struct estate* state) {
+void history_navigate(struct estate* state, int prompt_start) {
+	cursor_to_end(state);
+	int index = state->history_length;
+	short k = KEY_UP;
+	while (true) {
+		if (k == KEY_UP && index > 0) {
+			index--;
+			while (state->c1 > state->history_right[index])
+				cursor_left(state);
 
+			while (state->c1 > state->history_left[index])
+				cursor_left_select(state);
+		}
+		else if (k == KEY_DOWN && index < state->history_length - 1) {
+			index++;
+			while (state->c1 < state->history_left[index])
+				cursor_right(state);
+
+			while (state->c1 < state->history_right[index])
+				cursor_right_select(state);
+		}
+		else if (k == KEY_DOWN && index == state->history_length - 1) {
+			cursor_to_end(state);
+			return;
+		}
+		else if (k == '\n') {
+			cursor_to_end(state);
+			while (state->c1 > prompt_start)
+				bs(state);
+
+			for (int i=state->history_left[index] ; i < state->history_right[index] ; i++) {
+				insert_char(state, state->text[i]);
+			}
+			return;
+		}
+
+		draw_console(state);
+		gfx_SwapDraw();
+
+		k = ngetchx();
+	}
 }
 
-void history_prev_line(struct estate* state) {
-	
+
+void clear_console(struct estate* state) {
+	state->lc1 = 0;
+	state->lc2 = state->max_buffer_size - 1;
+	state->lc_offset = 0;
+	state->ls_offset = 0;
+	state->c1 = 0;
+	state->c2 = state->max_buffer_size - 1;
+	state->scr_offset = 0;
+	state->scr_line_offset = 0;
 }
 
 void console_cursor_left(struct estate *state, int last_prompt_start)
@@ -237,11 +304,13 @@ void console_bs(struct estate *state, int last_prompt_start)
 
 
 
-char* neonide_input(struct estate *state, char* prompt) {
-	neonide_print_string(state, prompt);
+char* neonide_input(char* prompt) {
+	neonide_print_string(prompt);
+	// We need the cursor to be at the end - this is currently done by neonide_print_string
+	struct estate *state = global_console_state;
 
     short k = 0;
-	int last_prompt_start = state->c1;
+	int prompt_start = state->c1;
 
     while (true) {
 		draw_console(state);
@@ -254,11 +323,18 @@ char* neonide_input(struct estate *state, char* prompt) {
             if (k == '\n') {
                 cursor_to_end(state);
 
-				char* buffer = malloc(state->c1 - last_prompt_start + 1);
-				for (int i=0 ; i + last_prompt_start < state->c1 ; i++) {
-					buffer[i] = state->text[i + last_prompt_start];
+				// Add content to history
+				if (state->c1 != prompt_start) {
+					state->history_left[state->history_length] = prompt_start;
+					state->history_right[state->history_length] = state->c1;
+					state->history_length++;
 				}
-				buffer[state->c1 - last_prompt_start] = '\0';
+
+				char* buffer = malloc(state->c1 - prompt_start + 1);
+				for (int i=0 ; i + prompt_start < state->c1 ; i++) {
+					buffer[i] = state->text[i + prompt_start];
+				}
+				buffer[state->c1 - prompt_start] = '\0';
 
 				insert_char(state, '\n');
 				return buffer;
@@ -273,25 +349,24 @@ char* neonide_input(struct estate *state, char* prompt) {
                 case KEY_CLEAR:
                     return NULL;
 				case KEY_SLEFT:
-					console_cursor_left_select(state, last_prompt_start);
+					console_cursor_left_select(state, prompt_start);
 					break;
 				case KEY_SRIGHT:
 					cursor_right_select(state);
 					break;
                 case KEY_LEFT: //left
-                    console_cursor_left(state, last_prompt_start);
+                    console_cursor_left(state, prompt_start);
                     break;
                 case KEY_RIGHT: //right
                     cursor_right(state);
                     break;
                 case KEY_DOWN: //down
-                    history_next_line(state);
                     break;
                 case KEY_UP: //up
-                    history_prev_line(state);
+					history_navigate(state, prompt_start);
                     break;
                 case KEY_BS: //backspace
-                    console_bs(state, last_prompt_start);
+                    console_bs(state, prompt_start);
                     break;
                 case KEY_DEL: //delete
                     del(state);
@@ -379,6 +454,8 @@ char* neonide_input(struct estate *state, char* prompt) {
 void start_using_console(char* name)
 {
 	struct estate state;
+	// Initialize the global console
+	global_console_state = &state;
 	initialize_console(&state);
 
 	if (name == NULL)
@@ -389,19 +466,17 @@ void start_using_console(char* name)
     fg_color = state.text_color;
 
     while (true) {
-	    char* text = neonide_input(&state, SEQUENCE_ENTREE);
+	    char* text = neonide_input(SEQUENCE_ENTREE);
         if (text == NULL)
             return;
 		
 		if (strlen(text) > 0) {
-			neonide_print_string(&state, text);
-			neonide_print_string(&state, "\n");
+			neonide_print_string(text);
+			neonide_print_string("\n");
 		}
 		free(text);
     }
 
 	deinit_state(&state);
+	global_console_state = NULL;
 }
-
-
-

@@ -24,20 +24,21 @@
 
 
 /*
- * The default font width
+ * The default font width and height
  */
-#define FONT_WIDTH 8
+#define FONT_WIDTH 		8
+#define FONT_HEIGHT 	13
 
 /*
  * The default line spacing
  */
-#define LINE_SPACING 12
+#define LINE_SPACING 14
 
 /*
  * The number of lines that fit on the screen,
  * minus one.
  */
-#define NUM_LINES 17
+#define NUM_LINES 14
 
 #define NUM_COLS 39
 
@@ -88,9 +89,6 @@ struct estate {
 	uint8_t border_color;
 	uint8_t dropshadow_color;
 	uint8_t focus_color;
-	char fontname[10];
-	int8_t fonttype;
-	fontlib_font_t *font;
     ti_var_t clipboard_file;
 	//the radius for rounded corners on dialogs.
 	int8_t corner_radius;
@@ -117,6 +115,12 @@ struct estate {
 	char* text;
 	//Line len buffer
 	int24_t* lines;
+
+	// left position of history content
+	int24_t history_left[NUM_LINES * 2];
+	int24_t history_right[NUM_LINES * 2];
+	uint8_t history_length;
+
 	//Data in the clipboard
 	//char clipboard_data[10000];
 	///////////////////////////Random Editor Settings///////////////////////////
@@ -131,16 +135,6 @@ struct estate {
 	//Default is true, if enabled, write files under a different filename, then remove the existing and rename the new file.
 	bool backupfiles;
 	//Default is true, if enabled, parse ceditrc from /etc/cedit/ceditrc. Otherwise use /home/.ceditrc
-	//Does nothin on TIOS
-	bool bos_use_system_config;
-	//Default is false. If enabled, boost BOS maximum buffer size to 128Kb
-	//Does nothing on TIOS
-	bool bos_use_extra_buffer;
-    //Hide special files, like config files:
-    //  Cesium config file
-    //  CLIBS
-    //  Experimental CLIBS - USBDRVCE/FATDRVCE
-    //  The DrMono font pack
     //  files that begin with a dot
     //  Default is true
     bool hide_special_files;

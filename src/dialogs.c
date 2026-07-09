@@ -27,7 +27,6 @@ You may use version 2.1 or later only.
 #include <stdint.h>
 #include <math.h>
 
-
 bool string_equal(struct estate *state, int24_t pointer, char* str) {
 	while (*str && pointer < state->max_buffer_size - 1) {
 		if (*str != state->text[pointer])
@@ -344,10 +343,6 @@ void show_editor_settings_dialog(struct estate *state)
 		fontlib_SetForegroundColor(index == 4 ? state->focus_color : state->text_color);
 		fontlib_SetCursorPosition(24 + 32, 96 + 19);
 		fontlib_DrawString("Copy on write");
-		draw_switch(state, 24, 96 + 36, state->bos_use_system_config); //bos_system
-		fontlib_SetForegroundColor(index == 5 ? state->focus_color : state->text_color);
-		fontlib_SetCursorPosition(24 + 32, 96 + 37);
-		fontlib_DrawString("Use config file in /etc");
 		draw_switch(state, 24, 96 + 54, state->hide_special_files); //extra_buffer
 		fontlib_SetForegroundColor(index == 6 ? state->focus_color : state->text_color);
 		fontlib_SetCursorPosition(24 + 32, 96 + 55);
@@ -394,7 +389,6 @@ void show_editor_settings_dialog(struct estate *state)
 				state->backupfiles = !(state->backupfiles);
 				break;
 			case 5:
-				state->bos_use_system_config = !(state->bos_use_system_config);
 				break;
 			case 6:
 				state->hide_special_files = !(state->hide_special_files);
